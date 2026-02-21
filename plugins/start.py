@@ -64,7 +64,8 @@ async def short_url(client: Client, message: Message, base64_string):
 @Bot.on_message(filters.command('start') & filters.private)
 async def start_command(client: Client, message: Message):
     user_id = message.from_user.id
-    is_premium = await is_premium_user(user_id)
+    text = message.text or ""
+    argument = None
 
     if not await db.present_user(user_id):
         try:
@@ -83,88 +84,45 @@ async def start_command(client: Client, message: Message):
         )
 
     FILE_AUTO_DELETE = await db.get_del_timer()
-    argument = None
 
-    # Check for start parameter
+    # Check if /start has a parameter
     if len(message.command) > 1:
         basic = message.command[1]
-        verify_status = await db.get_verify_status(user_id) or {}
 
-        # ===============================
-        # 🔐 VERIFY TOKEN SYSTEM
-        # ===============================
+        # Only process verify tokens (file-specific)
         if basic.startswith("verify_"):
             try:
-                _, uid, token = basic.split("_", 2)
+                _, uid, token, file_token = basic.split("_", 3)
             except:
                 return await message.reply("⚠️ Invalid verification format.")
 
             if int(uid) != user_id:
                 return await message.reply("⚠️ Token does not belong to you.")
 
-            if verify_status.get("verify_token") != token:
-                return await message.reply("⚠️ Invalid token.")
+            verify_status = await db.get_file_verify_status(user_id, file_token) or {}
 
-            current_time = time.time()
-            created_at = verify_status.get("token_created_at", 0)
-            time_taken = current_time - created_at
-
-            if time_taken < 3:
-                await db.add_ban_user(user_id)
-                return await message.reply("🚫 You are banned for bypassing.")
-
-            if time_taken < MIN_VERIFY_TIME:
-                # Notify owner about bypass
+            if verify_status.get("is_verified"):
+                argument = file_token.split("-")
+            else:
+                # Notify owner
                 try:
                     await client.send_message(
                         chat_id=OWNER_ID,
                         text=(
                             f"⚠️ Bypass Detected!\n\n"
                             f"User: {message.from_user.mention} (<code>{user_id}</code>)\n"
-                            f"Link: <code>{basic}</code>\n"
-                            f"Time Taken: {time_taken:.2f}s"
+                            f"Link: <code>{basic}</code>"
                         )
                     )
-                except Exception as e:
-                    print(f"Error sending bypass notification: {e}")
-
+                except:
+                    pass
                 return await message.reply("🚫 Bypass detected! Please verify the link.")
 
-            if time_taken > MAX_VERIFY_TIME:
-                return await message.reply("⚠️ Token expired. Generate new link.")
-
-            await db.update_verify_status(user_id, is_verified=True, verified_time=current_time)
-            return await message.reply("✅ Verification successful!")
-
-        # ===============================
-        # 🔐 NORMAL FILE REQUEST
-        # ===============================
-        if not is_premium and user_id != OWNER_ID:
-            if not verify_status.get("is_verified"):
-                token = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
-                await db.update_verify_status(
-                    user_id,
-                    verify_token=token,
-                    is_verified=False,
-                    token_created_at=time.time()
-                )
-                verify_link = f"https://t.me/{client.username}?start=verify_{user_id}_{token}"
-                short_link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, verify_link)
-
-                buttons = [[
-                    InlineKeyboardButton("ᴏᴘᴇɴ ʟɪɴᴋ", url=short_link),
-                    InlineKeyboardButton("ᴛᴜᴛᴏʀɪᴀʟ", url=TUT_VID)
-                ]]
-
-                return await message.reply_photo(
-                    photo=SHORTENER_PIC,
-                    caption="🔐 Please complete verification to access file.",
-                    reply_markup=InlineKeyboardMarkup(buttons)
-                )
-
-        base64_string = basic
-        string_data = await decode(base64_string)
-        argument = string_data.split("-")
+        else:
+            # It's a normal file request link (base64)
+            base64_string = basic
+            string_data = await decode(base64_string)
+            argument = string_data.split("-")
 
     # ===============================
     # 📂 FILE FETCH SECTION
@@ -173,17 +131,11 @@ async def start_command(client: Client, message: Message):
         ids = []
 
         if len(argument) == 3:
-            try:
-                start = int(int(argument[1]) / abs(client.db_channel.id))
-                end = int(int(argument[2]) / abs(client.db_channel.id))
-                ids = range(start, end + 1) if start <= end else list(range(start, end - 1, -1))
-            except:
-                return
+            start = int(int(argument[1]) / abs(client.db_channel.id))
+            end = int(int(argument[2]) / abs(client.db_channel.id))
+            ids = range(start, end + 1) if start <= end else list(range(start, end - 1, -1))
         elif len(argument) == 2:
-            try:
-                ids = [int(int(argument[1]) / abs(client.db_channel.id))]
-            except:
-                return
+            ids = [int(int(argument[1]) / abs(client.db_channel.id))]
 
         temp_msg = await message.reply("<b>Please wait...</b>")
         try:
@@ -233,15 +185,6 @@ async def start_command(client: Client, message: Message):
                         await snt_msg.delete()
                     except:
                         pass
-            try:
-                reload_url = f"https://t.me/{client.username}?start={message.command[1]}" if message.command and len(message.command) > 1 else None
-                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("ɢᴇᴛ ғɪʟᴇ ᴀɢᴀɪɴ!", url=reload_url)]]) if reload_url else None
-                await notification_msg.edit(
-                    "<b>Your file was deleted! Click below to get it again 👇</b>",
-                    reply_markup=keyboard
-                )
-            except:
-                pass
 
     else:
         # No parameter → show start message
@@ -265,6 +208,7 @@ async def start_command(client: Client, message: Message):
             message_effect_id=5104841245755180586
         )
         return
+
 
 
 
