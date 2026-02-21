@@ -93,9 +93,9 @@ async def start_command(client: Client, message: Message):
     text = message.text or ""
 
     if len(message.command) > 1:
-    try:
-        basic = message.command[1]
-        verify_status = await db.get_verify_status(user_id) or {}
+        try:
+            basic = message.command[1]
+            verify_status = await db.get_verify_status(user_id) or {}
 
         # ===============================
         # 🔐 VERIFY TOKEN SYSTEM
