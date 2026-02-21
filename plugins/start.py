@@ -1,22 +1,11 @@
-# Don't Remove Credit @CodeFlix_Bots, @rohit_1888
-# Ask Doubt on telegram @CodeflixSupport
-#
-# Copyright (C) 2025 by Codeflix-Bots@Github, < https://github.com/Codeflix-Bots >.
-#
-# This file is part of < https://github.com/Codeflix-Bots/FileStore > project,
-# and is released under the MIT License.
-# Please see < https://github.com/Codeflix-Bots/FileStore/blob/master/LICENSE >
-#
-# All rights reserved.
-#
+#(©)Codexbotz
 
 import asyncio
 import os
 import random
 import sys
 import re
-import string 
-import string as rohit
+import string
 import time
 from datetime import datetime, timedelta
 from pyrogram import Client, filters, __version__
@@ -29,6 +18,7 @@ from config import *
 from helper_func import *
 from database.database import *
 from database.db_premium import *
+from pytz import timezone
 
 
 MIN_VERIFY_TIME = 80
@@ -38,6 +28,10 @@ MAX_BYPASS_ATTEMPTS = 3
 BAN_SUPPORT = f"{BAN_SUPPORT}"
 TUT_VID = f"{TUT_VID}"
 
+# global chat cache
+chat_data_cache = {}
+
+#======================== SHORT URL =========================
 async def short_url(client: Client, message: Message, base64_string):
     try:
         prem_link = f"https://t.me/{client.username}?start=yu3elk{base64_string}7"
@@ -55,15 +49,14 @@ async def short_url(client: Client, message: Message, base64_string):
 
         await message.reply_photo(
             photo=SHORTENER_PIC,
-            caption=SHORT_MSG.format(
-            ),
+            caption=SHORT_MSG.format(),
             reply_markup=InlineKeyboardMarkup(buttons),
         )
 
     except IndexError:
         pass
 
-
+#======================== START COMMAND =========================
 @Bot.on_message(filters.command('start') & filters.private)
 async def start_command(client: Client, message: Message):
     user_id = message.from_user.id
@@ -92,6 +85,7 @@ async def start_command(client: Client, message: Message):
     FILE_AUTO_DELETE = await db.get_del_timer()
     text = message.text or ""
 
+    argument = None  # <<< fix UnboundLocalError
     if len(message.command) > 1:
         try:
             basic = message.command[1]
@@ -123,19 +117,11 @@ async def start_command(client: Client, message: Message):
 
                 if time_taken < MIN_VERIFY_TIME:
                     attempts = verify_status.get("bypass_attempts", 0) + 1
-
-                    await db.update_verify_status(
-                        user_id,
-                        bypass_attempts=attempts
-                    )
-
+                    await db.update_verify_status(user_id, bypass_attempts=attempts)
                     if attempts >= MAX_BYPASS_ATTEMPTS:
                         await db.add_ban_user(user_id)
                         return await message.reply("🚫 Banned for repeated bypass attempts.")
-
-                    return await message.reply(
-                        f"🚫 Bypass detected!\nAttempt: {attempts}/3"
-                    )
+                    return await message.reply(f"🚫 Bypass detected!\nAttempt: {attempts}/3")
 
                 if time_taken > MAX_VERIFY_TIME:
                     return await message.reply("⚠️ Token expired. Generate new link.")
@@ -145,19 +131,15 @@ async def start_command(client: Client, message: Message):
                     is_verified=True,
                     verified_time=current_time
                 )
-
                 return await message.reply("✅ Verification successful!")
 
         except Exception as e:
             print(f"Error in start command: {e}")
             return await message.reply("⚠️ Something went wrong.")
 
-        
-
         # ===============================
         # 🔐 NORMAL FILE REQUEST
         # ===============================
-
         if not is_premium and user_id != OWNER_ID:
             if not verify_status.get("is_verified"):
 
@@ -187,112 +169,107 @@ async def start_command(client: Client, message: Message):
 
         # If verified → continue file processing
         base64_string = basic
+        string_decoded = await decode(base64_string)
+        argument = string_decoded.split("-")
 
-        string = await decode(base64_string)
-        argument = string.split("-")
-        
     # ===============================
     # 📂 FILE FETCH SECTION
     # ===============================
-
     ids = []
 
-    if len(argument) == 3:
-        try:
-            start = int(int(argument[1]) / abs(client.db_channel.id))
-            end = int(int(argument[2]) / abs(client.db_channel.id))
-            ids = range(start, end + 1) if start <= end else list(range(start, end - 1, -1))
-        except Exception as e:
-            print(f"Error decoding IDs: {e}")
-            return
-
-    elif len(argument) == 2:
-        try:
-            ids = [int(int(argument[1]) / abs(client.db_channel.id))]
-        except Exception as e:
-            print(f"Error decoding ID: {e}")
-            return
-            
-        temp_msg = await message.reply("<b>Please wait...</b>")
-        try:
-            messages = await get_messages(client, ids)
-        except Exception as e:
-            await message.reply_text("Something went wrong!")
-            print(f"Error getting messages: {e}")
-            return
-        finally:
-            await temp_msg.delete()
-
-        codeflix_msgs = []
-
-        for msg in messages:
-            original_caption = msg.caption.html if msg.caption else ""
-            caption = f"{original_caption}\n\n{CUSTOM_CAPTION}" if CUSTOM_CAPTION else original_caption
-            reply_markup = msg.reply_markup if DISABLE_CHANNEL_BUTTON else None
-
+    if argument:
+        if len(argument) == 3:
             try:
-                snt_msg = await msg.copy(
-                    chat_id=message.from_user.id,
-                    caption=caption,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=reply_markup,
-                    protect_content=PROTECT_CONTENT
-                )
-                await asyncio.sleep(0.5)
-                codeflix_msgs.append(snt_msg)
-            except FloodWait as e:
-                await asyncio.sleep(e.x)
-                copied_msg = await msg.copy(
-                    chat_id=message.from_user.id,
-                    caption=caption,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=reply_markup,
-                    protect_content=PROTECT_CONTENT
-                )
-                codeflix_msgs.append(copied_msg)
-            except:
-                pass
-
-        if FILE_AUTO_DELETE > 0:
-            notification_msg = await message.reply(
-                f"<b>Tʜɪs Fɪʟᴇ ᴡɪʟʟ ʙᴇ Dᴇʟᴇᴛᴇᴅ ɪɴ  {get_exp_time(FILE_AUTO_DELETE)}. Pʟᴇᴀsᴇ sᴀᴠᴇ ᴏʀ ғᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ʙᴇғᴏʀᴇ ɪᴛ ɢᴇᴛs Dᴇʟᴇᴛᴇᴅ.</b>"
-            )
-
-            await asyncio.sleep(FILE_AUTO_DELETE)
-
-            for snt_msg in codeflix_msgs:    
-                if snt_msg:
-                    try:    
-                        await snt_msg.delete()  
-                    except Exception as e:
-                        print(f"Error deleting message {snt_msg.id}: {e}")
-
-            try:
-                reload_url = (
-                    f"https://t.me/{client.username}?start={message.command[1]}"
-                    if message.command and len(message.command) > 1
-                    else None
-                )
-                keyboard = InlineKeyboardMarkup(
-                    [[InlineKeyboardButton("ɢᴇᴛ ғɪʟᴇ ᴀɢᴀɪɴ!", url=reload_url)]]
-                ) if reload_url else None
-
-                await notification_msg.edit(
-                    "<b>ʏᴏᴜʀ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ ɪꜱ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ !!\n\nᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ᴅᴇʟᴇᴛᴇᴅ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ 👇</b>",
-                    reply_markup=keyboard
-                )
+                start = int(int(argument[1]) / abs(client.db_channel.id))
+                end = int(int(argument[2]) / abs(client.db_channel.id))
+                ids = range(start, end + 1) if start <= end else list(range(start, end - 1, -1))
             except Exception as e:
-                print(f"Error updating notification with 'Get File Again' button: {e}")
+                print(f"Error decoding IDs: {e}")
+                return
+        elif len(argument) == 2:
+            try:
+                ids = [int(int(argument[1]) / abs(client.db_channel.id))]
+            except Exception as e:
+                print(f"Error decoding ID: {e}")
+                return
+
+            temp_msg = await message.reply("<b>Please wait...</b>")
+            try:
+                messages = await get_messages(client, ids)
+            except Exception as e:
+                await message.reply_text("Something went wrong!")
+                print(f"Error getting messages: {e}")
+                return
+            finally:
+                await temp_msg.delete()
+
+            codeflix_msgs = []
+            for msg in messages:
+                original_caption = msg.caption.html if msg.caption else ""
+                caption = f"{original_caption}\n\n{CUSTOM_CAPTION}" if CUSTOM_CAPTION else original_caption
+                reply_markup = msg.reply_markup if DISABLE_CHANNEL_BUTTON else None
+
+                try:
+                    snt_msg = await msg.copy(
+                        chat_id=message.from_user.id,
+                        caption=caption,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=reply_markup,
+                        protect_content=PROTECT_CONTENT
+                    )
+                    await asyncio.sleep(0.5)
+                    codeflix_msgs.append(snt_msg)
+                except FloodWait as e:
+                    await asyncio.sleep(e.x)
+                    copied_msg = await msg.copy(
+                        chat_id=message.from_user.id,
+                        caption=caption,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=reply_markup,
+                        protect_content=PROTECT_CONTENT
+                    )
+                    codeflix_msgs.append(copied_msg)
+                except:
+                    pass
+
+            if FILE_AUTO_DELETE > 0:
+                notification_msg = await message.reply(
+                    f"<b>Tʜɪs Fɪʟᴇ ᴡɪʟʟ ʙᴇ Dᴇʟᴇᴛᴇᴅ ɪɴ  {get_exp_time(FILE_AUTO_DELETE)}. Pʟᴇᴀsᴇ sᴀᴠᴇ ᴏʀ ғᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ʙᴇғᴏʀᴇ ɪᴛ ɢᴇᴛs Dᴇʟᴇᴛᴇᴅ.</b>"
+                )
+
+                await asyncio.sleep(FILE_AUTO_DELETE)
+                for snt_msg in codeflix_msgs:
+                    if snt_msg:
+                        try:
+                            await snt_msg.delete()
+                        except Exception as e:
+                            print(f"Error deleting message {snt_msg.id}: {e}")
+
+                try:
+                    reload_url = (
+                        f"https://t.me/{client.username}?start={message.command[1]}"
+                        if message.command and len(message.command) > 1
+                        else None
+                    )
+                    keyboard = InlineKeyboardMarkup(
+                        [[InlineKeyboardButton("ɢᴇᴛ ғɪʟᴇ ᴀɢᴀɪɴ!", url=reload_url)]]
+                    ) if reload_url else None
+
+                    await notification_msg.edit(
+                        "<b>ʏᴏᴜʀ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ ɪꜱ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ !!\n\nᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ᴅᴇʟᴇᴛᴇᴅ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ 👇</b>",
+                        reply_markup=keyboard
+                    )
+                except Exception as e:
+                    print(f"Error updating notification with 'Get File Again' button: {e}")
     else:
+        # Send start message if no argument
         reply_markup = InlineKeyboardMarkup(
             [
-                    [InlineKeyboardButton("• ᴍᴏʀᴇ ᴄʜᴀɴɴᴇʟs •", url="https://t.me/Nova_Flix/50")],
-
-    [
-                    InlineKeyboardButton("• ᴀʙᴏᴜᴛ", callback_data = "about"),
-                    InlineKeyboardButton('ʜᴇʟᴘ •', callback_data = "help")
-
-    ]
+                [InlineKeyboardButton("• ᴍᴏʀᴇ ᴄʜᴀɴɴᴇʟs •", url="https://t.me/Nova_Flix/50")],
+                [
+                    InlineKeyboardButton("• ᴀʙᴏᴜᴛ", callback_data="about"),
+                    InlineKeyboardButton("ʜᴇʟᴘ •", callback_data="help")
+                ]
             ]
         )
         await message.reply_photo(
@@ -305,9 +282,11 @@ async def start_command(client: Client, message: Message):
                 id=message.from_user.id
             ),
             reply_markup=reply_markup,
-            message_effect_id=5104841245755180586)  # 🔥
-        
+            message_effect_id=5104841245755180586
+        )
         return
+
+
 
 
 
