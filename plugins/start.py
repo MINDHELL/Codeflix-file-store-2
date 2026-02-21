@@ -122,6 +122,23 @@ async def start_command(client: Client, message: Message):
     text = message.text
     FILE_AUTO_DELETE = await db.get_del_timer()
 
+# Handle /start with payload (e.g., from short link)
+    start_payload = message.text.split(" ")[1] if len(message.text.split()) > 1 else None
+
+    if start_payload:
+        # Call short_url if payload exists
+        await short_url(client, message, start_payload)
+    else:
+        # No payload → welcome message or instructions
+        await message.reply_text(
+            "<b>👋 Welcome! Click the buttons below to get started.</b>",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("ᴛᴜᴛᴏʀɪᴀʟ", url=TUT_VID)]]
+            )
+    )
+
+    
+
     # -------------------------------
     # HANDLE PAYLOAD / START LINK
     # -------------------------------
