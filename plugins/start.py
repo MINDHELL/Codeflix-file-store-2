@@ -31,40 +31,53 @@ from database.database import *
 from database.db_premium import *
 
 
+MIN_VERIFY_TIME = 80
+MAX_VERIFY_TIME = 600
+
+# Store per-user per-file verification timestamps
+verify_cache = {}  # {user_id: {base64_string: timestamp}}
+
 BAN_SUPPORT = f"{BAN_SUPPORT}"
 TUT_VID = f"{TUT_VID}"
 
+
 async def short_url(client: Client, message: Message, base64_string):
-    try:
+    try:  # Add the try here to catch IndexError
+        user_id = message.from_user.id
+
+        # Store generation time
+        if user_id not in verify_cache:
+            verify_cache[user_id] = {}
+        verify_cache[user_id][base64_string] = time.time()
+
         prem_link = f"https://t.me/{client.username}?start=yu3elk{base64_string}7"
         short_link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, prem_link)
 
         buttons = [
             [
-                InlineKeyboardButton(text="ᴅᴏᴡɴʟᴏᴀᴅ", url=short_link),
-                InlineKeyboardButton(text="ᴛᴜᴛᴏʀɪᴀʟ", url=TUT_VID)
+                InlineKeyboardButton("ᴅᴏᴡɴʟᴏᴀᴅ", url=short_link),
+                InlineKeyboardButton("ᴛᴜᴛᴏʀɪᴀʟ", url=TUT_VID)
             ],
             [
-                InlineKeyboardButton(text="ᴘʀᴇᴍɪᴜᴍ", callback_data="premium")
+                InlineKeyboardButton("ᴘʀᴇᴍɪᴜᴍ", callback_data="premium")
             ]
         ]
 
         await message.reply_photo(
             photo=SHORTENER_PIC,
-            caption=SHORT_MSG.format(
-            ),
-            reply_markup=InlineKeyboardMarkup(buttons),
+            caption=SHORT_MSG,
+            reply_markup=InlineKeyboardMarkup(buttons)
         )
-
     except IndexError:
-        pass
+        pass  # Now this is valid
+
+
 
 
 @Bot.on_message(filters.command('start') & filters.private)
 async def start_command(client: Client, message: Message):
     user_id = message.from_user.id
-    id = message.from_user.id
-    is_premium = await is_premium_user(id)
+    is_premium = await is_premium_user(user_id)
 
     # Add user if not already present
     if not await db.present_user(user_id):
@@ -88,142 +101,165 @@ async def start_command(client: Client, message: Message):
             )
         )
 
-    # File auto-delete time in seconds
+    text = message.text
     FILE_AUTO_DELETE = await db.get_del_timer()
 
-    # Handle normal message flow
-    text = message.text
-
+    # -------------------------------
+    # HANDLE PAYLOAD / START LINK
+    # -------------------------------
     if len(text) > 7:
         try:
             basic = text.split(" ", 1)[1]
-            if basic.startswith("yu3elk"):
-                base64_string = basic[6:-1]
-            else:
-                base64_string = basic
+            base64_string = basic[6:-1] if basic.startswith("yu3elk") else basic
 
-            if not is_premium and user_id != OWNER_ID and not basic.startswith("yu3elk"):
-                await short_url(client, message, base64_string)
-                return
+            # ===== BYPASS DETECTION =====
+            if not is_premium and user_id != OWNER_ID:
+                if user_id not in verify_cache or base64_string not in verify_cache[user_id]:
+                    await message.reply_text(
+                        "⛔ Bypass Detected!\nYou must access the file using the short link."
+                    )
+                    # Notify owner
+                    await client.send_message(
+                        chat_id=OWNER_ID,
+                        text=f"⚠️ BYPASS ALERT!\nUser {message.from_user.mention} ({user_id}) tried to access file `{base64_string}` without verification."
+                    )
+                    return
 
-        except Exception as e:
-            print(f"Error processing start payload: {e}")
+                sent_time = verify_cache[user_id][base64_string]
+                elapsed = time.time() - sent_time
 
-        string = await decode(base64_string)
-        argument = string.split("-")
+                if elapsed < MIN_VERIFY_TIME:
+                    await message.reply_text(
+                        f"⛔ Bypass Detected!\nPlease complete verification first.\nMinimum verification time: {MIN_VERIFY_TIME}s."
+                    )
+                    # Notify owner
+                    await client.send_message(
+                        chat_id=OWNER_ID,
+                        text=f"⚠️ BYPASS ALERT!\nUser {message.from_user.mention} ({user_id}) clicked original link too early.\nElapsed: {int(elapsed)}s for file `{base64_string}`."
+                    )
+                    return
 
-        ids = []
-        if len(argument) == 3:
-            try:
+                if elapsed > MAX_VERIFY_TIME:
+                    del verify_cache[user_id][base64_string]
+                    await message.reply_text(
+                        "⏰ Link Expired!\nPlease generate a new link."
+                    )
+                    return
+
+            # ===== DECODE PAYLOAD & GET FILE IDS =====
+            string = await decode(base64_string)
+            argument = string.split("-")
+            ids = []
+
+            if len(argument) == 3:
                 start = int(int(argument[1]) / abs(client.db_channel.id))
                 end = int(int(argument[2]) / abs(client.db_channel.id))
                 ids = range(start, end + 1) if start <= end else list(range(start, end - 1, -1))
-            except Exception as e:
-                print(f"Error decoding IDs: {e}")
-                return
-
-        elif len(argument) == 2:
-            try:
+            elif len(argument) == 2:
                 ids = [int(int(argument[1]) / abs(client.db_channel.id))]
+
+            # Fetch messages/files
+            temp_msg = await message.reply("<b>Please wait...</b>")
+            try:
+                messages = await get_messages(client, ids)
             except Exception as e:
-                print(f"Error decoding ID: {e}")
+                await message.reply_text("Something went wrong!")
+                print(f"Error getting messages: {e}")
                 return
+            finally:
+                await temp_msg.delete()
 
-        temp_msg = await message.reply("<b>Please wait...</b>")
-        try:
-            messages = await get_messages(client, ids)
-        except Exception as e:
-            await message.reply_text("Something went wrong!")
-            print(f"Error getting messages: {e}")
-            return
-        finally:
-            await temp_msg.delete()
+            codeflix_msgs = []
+            for msg in messages:
+                original_caption = msg.caption.html if msg.caption else ""
+                caption = f"{original_caption}\n\n{CUSTOM_CAPTION}" if CUSTOM_CAPTION else original_caption
+                reply_markup = msg.reply_markup if DISABLE_CHANNEL_BUTTON else None
 
-        codeflix_msgs = []
+                try:
+                    snt_msg = await msg.copy(
+                        chat_id=message.from_user.id,
+                        caption=caption,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=reply_markup,
+                        protect_content=PROTECT_CONTENT
+                    )
+                    await asyncio.sleep(0.5)
+                    codeflix_msgs.append(snt_msg)
+                except FloodWait as e:
+                    await asyncio.sleep(e.x)
+                    snt_msg = await msg.copy(
+                        chat_id=message.from_user.id,
+                        caption=caption,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=reply_markup,
+                        protect_content=PROTECT_CONTENT
+                    )
+                    codeflix_msgs.append(snt_msg)
+                except:
+                    pass
 
-        for msg in messages:
-            original_caption = msg.caption.html if msg.caption else ""
-            caption = f"{original_caption}\n\n{CUSTOM_CAPTION}" if CUSTOM_CAPTION else original_caption
-            reply_markup = msg.reply_markup if DISABLE_CHANNEL_BUTTON else None
-
-            try:
-                snt_msg = await msg.copy(
-                    chat_id=message.from_user.id,
-                    caption=caption,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=reply_markup,
-                    protect_content=PROTECT_CONTENT
+            # Auto-delete handling
+            if FILE_AUTO_DELETE > 0:
+                notification_msg = await message.reply(
+                    f"<b>This file will be deleted in {get_exp_time(FILE_AUTO_DELETE)}. Please save or forward it before it is deleted.</b>"
                 )
-                await asyncio.sleep(0.5)
-                codeflix_msgs.append(snt_msg)
-            except FloodWait as e:
-                await asyncio.sleep(e.x)
-                copied_msg = await msg.copy(
-                    chat_id=message.from_user.id,
-                    caption=caption,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=reply_markup,
-                    protect_content=PROTECT_CONTENT
-                )
-                codeflix_msgs.append(copied_msg)
-            except:
-                pass
 
-        if FILE_AUTO_DELETE > 0:
-            notification_msg = await message.reply(
-                f"<b>Tʜɪs Fɪʟᴇ ᴡɪʟʟ ʙᴇ Dᴇʟᴇᴛᴇᴅ ɪɴ  {get_exp_time(FILE_AUTO_DELETE)}. Pʟᴇᴀsᴇ sᴀᴠᴇ ᴏʀ ғᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ʙᴇғᴏʀᴇ ɪᴛ ɢᴇᴛs Dᴇʟᴇᴛᴇᴅ.</b>"
-            )
+                await asyncio.sleep(FILE_AUTO_DELETE)
+                for snt_msg in codeflix_msgs:
+                    if snt_msg:
+                        try:
+                            await snt_msg.delete()
+                        except Exception as e:
+                            print(f"Error deleting message {snt_msg.id}: {e}")
 
-            await asyncio.sleep(FILE_AUTO_DELETE)
-
-            for snt_msg in codeflix_msgs:    
-                if snt_msg:
-                    try:    
-                        await snt_msg.delete()  
-                    except Exception as e:
-                        print(f"Error deleting message {snt_msg.id}: {e}")
-
-            try:
+                # Reload button
                 reload_url = (
                     f"https://t.me/{client.username}?start={message.command[1]}"
-                    if message.command and len(message.command) > 1
-                    else None
+                    if message.command and len(message.command) > 1 else None
                 )
                 keyboard = InlineKeyboardMarkup(
                     [[InlineKeyboardButton("ɢᴇᴛ ғɪʟᴇ ᴀɢᴀɪɴ!", url=reload_url)]]
                 ) if reload_url else None
 
-                await notification_msg.edit(
-                    "<b>ʏᴏᴜʀ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ ɪꜱ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ !!\n\nᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ᴅᴇʟᴇᴛᴇᴅ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ 👇</b>",
-                    reply_markup=keyboard
-                )
-            except Exception as e:
-                print(f"Error updating notification with 'Get File Again' button: {e}")
-    else:
-        reply_markup = InlineKeyboardMarkup(
-            [
-                    [InlineKeyboardButton("• ᴍᴏʀᴇ ᴄʜᴀɴɴᴇʟs •", url="https://t.me/Nova_Flix/50")],
+                try:
+                    await notification_msg.edit(
+                        "<b>Your video/file was successfully deleted!</b>",
+                        reply_markup=keyboard
+                    )
+                except Exception as e:
+                    print(f"Error updating notification: {e}")
 
-    [
-                    InlineKeyboardButton("• ᴀʙᴏᴜᴛ", callback_data = "about"),
-                    InlineKeyboardButton('ʜᴇʟᴘ •', callback_data = "help")
-
-    ]
-            ]
-        )
-        await message.reply_photo(
-            photo=START_PIC,
-            caption=START_MSG.format(
-                first=message.from_user.first_name,
-                last=message.from_user.last_name,
-                username=None if not message.from_user.username else '@' + message.from_user.username,
-                mention=message.from_user.mention,
-                id=message.from_user.id
-            ),
-            reply_markup=reply_markup,
-            message_effect_id=5104841245755180586)  # 🔥
-        
+        except Exception as e:
+            print(f"Error processing start payload: {e}")
+            await message.reply_text("❌ Invalid or expired link.")
         return
+
+    # -------------------------------
+    # NO PAYLOAD → Send Welcome Message
+    # -------------------------------
+    reply_markup = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("• ᴍᴏʀᴇ ᴄʜᴀɴɴᴇʟs •", url="https://t.me/Nova_Flix/50")],
+            [
+                InlineKeyboardButton("• ᴀʙᴏᴜᴛ", callback_data="about"),
+                InlineKeyboardButton("ʜᴇʟᴘ •", callback_data="help")
+            ]
+        ]
+    )
+    await message.reply_photo(
+        photo=START_PIC,
+        caption=START_MSG.format(
+            first=message.from_user.first_name,
+            last=message.from_user.last_name,
+            username=None if not message.from_user.username else '@' + message.from_user.username,
+            mention=message.from_user.mention,
+            id=message.from_user.id
+        ),
+        reply_markup=reply_markup,
+        message_effect_id=5104841245755180586
+            )
+
+
 
 
 
