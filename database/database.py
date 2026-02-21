@@ -215,64 +215,66 @@ class Rohit:
             #print(f"Channel {channel_id} NOT found in the database.")
             return False
 
+# VERIFICATION MANAGEMENT
+
+    async def db_verify_status(self, user_id):
+        user = await self.user_data.find_one({'_id': user_id})
+        if user:
+            return user.get('verify_status', default_verify)
+        return default_verify
 
 
-    # VERIFICATION MANAGEMENT
-
-async def db_verify_status(self, user_id):
-    user = await self.user_data.find_one({'_id': user_id})
-    if user:
-        return user.get('verify_status', default_verify)
-    return default_verify
-
-
-async def db_update_verify_status(self, user_id, verify):
-    await self.user_data.update_one(
-        {'_id': user_id},
-        {'$set': {'verify_status': verify}}
-    )
+    async def db_update_verify_status(self, user_id, verify):
+        await self.user_data.update_one(
+            {'_id': user_id},
+            {'$set': {'verify_status': verify}},
+            upsert=True
+        )
 
 
-async def get_verify_status(self, user_id):
-    verify = await self.db_verify_status(user_id)
-    return verify
+    async def get_verify_status(self, user_id):
+        return await self.db_verify_status(user_id)
 
 
-async def update_verify_status(self, user_id, **kwargs):
-    current = await self.db_verify_status(user_id)
+    async def update_verify_status(self, user_id, **kwargs):
+        current = await self.db_verify_status(user_id)
 
-    for key, value in kwargs.items():
-        current[key] = value
+        for key, value in kwargs.items():
+            current[key] = value
 
-    await self.db_update_verify_status(user_id, current)
-    
-    
+        await self.db_update_verify_status(user_id, current)
 
-    # Set verify count (overwrite with new value)
+
     async def set_verify_count(self, user_id: int, count: int):
-        await self.sex_data.update_one({'_id': user_id}, {'$set': {'verify_count': count}}, upsert=True)
+        await self.sex_data.update_one(
+            {'_id': user_id},
+            {'$set': {'verify_count': count}},
+            upsert=True
+        )
 
-    # Get verify count (default to 0 if not found)
+
     async def get_verify_count(self, user_id: int):
         user = await self.sex_data.find_one({'_id': user_id})
         if user:
             return user.get('verify_count', 0)
         return 0
 
-    # Reset all users' verify counts to 0
+
     async def reset_all_verify_counts(self):
         await self.sex_data.update_many(
             {},
-            {'$set': {'verify_count': 0}} 
+            {'$set': {'verify_count': 0}}
         )
 
-    # Get total verify count across all users
+
     async def get_total_verify_count(self):
         pipeline = [
             {"$group": {"_id": None, "total": {"$sum": "$verify_count"}}}
         ]
         result = await self.sex_data.aggregate(pipeline).to_list(length=1)
         return result[0]["total"] if result else 0
+
+
 
 
 db = Rohit(DB_URI, DB_NAME)
