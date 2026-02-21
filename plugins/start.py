@@ -1,15 +1,10 @@
 #=====================================================================================##
-# Don't Remove Credit @CodeFlix_Bots, @rohit_1888
-# Ask Doubt on telegram @CodeflixSupport
-# Copyright (C) 2025 by Codeflix-Bots@Github
+# Credit @CodeFlix_Bots, @rohit_1888
 # Project: https://github.com/Codeflix-Bots/FileStore
 # License: MIT
 #=====================================================================================##
 
 import asyncio
-import os
-import random
-import string
 import time
 from datetime import datetime, timedelta
 from pyrogram import Client, filters
@@ -22,53 +17,53 @@ from helper_func import *
 from database.database import *
 from database.db_premium import *
 
-# Verification timing
+# ------------------------------
+# Constants
+# ------------------------------
 MIN_VERIFY_TIME = 80
 MAX_VERIFY_TIME = 600
-verify_cache = {}  # {user_id: {base64_string: timestamp}}
-
-# Constants
+verify_cache = {}  # {user_id: {base64_string: {"timestamp": t, "clicked": bool}}}
 BAN_SUPPORT = f"{BAN_SUPPORT}"
 TUT_VID = f"{TUT_VID}"
 
 # ------------------------------
-# Short URL generator function
+# Short URL generator
 # ------------------------------
 async def short_url(client: Client, message: Message, base64_string):
-    try:
-        user_id = message.from_user.id
+    user_id = message.from_user.id
 
-        # Store generation time
-        if user_id not in verify_cache:
-            verify_cache[user_id] = {}
-        verify_cache[user_id][base64_string] = time.time()
+    # If already clicked, send the file instead
+    if user_id in verify_cache and base64_string in verify_cache[user_id]:
+        if verify_cache[user_id][base64_string]["clicked"]:
+            await handle_file_access(client, message, base64_string, is_premium=False)
+            return
 
-        prem_link = f"https://t.me/{client.username}?start=yu3elk{base64_string}7"
-        short_link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, prem_link)
+    # Generate short link
+    prem_link = f"https://t.me/{client.username}?start=yu3elk{base64_string}7"
+    short_link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, prem_link)
+    if not short_link:
+        return await message.reply_text("⚠️ Could not generate short link. Please try again later.")
 
-        if not short_link:
-            return await message.reply_text(
-                "⚠️ Sorry, the short link could not be generated. Please try again later."
-            )
+    # Store timestamp and mark as not clicked
+    if user_id not in verify_cache:
+        verify_cache[user_id] = {}
+    verify_cache[user_id][base64_string] = {"timestamp": time.time(), "clicked": False}
 
-        buttons = [
-            [
-                InlineKeyboardButton("ᴅᴏᴡɴʟᴏᴀᴅ", url=short_link),
-                InlineKeyboardButton("ᴛᴜᴛᴏʀɪᴀʟ", url=TUT_VID)
-            ],
-            [
-                InlineKeyboardButton("ᴘʀᴇᴍɪᴜᴍ", callback_data="premium")
-            ]
+    buttons = [
+        [
+            InlineKeyboardButton("ᴅᴏᴡɴʟᴏᴀᴅ", url=short_link),
+            InlineKeyboardButton("ᴛᴜᴛᴏʀɪᴀʟ", url=TUT_VID)
+        ],
+        [
+            InlineKeyboardButton("ᴘʀᴇᴍɪᴜᴍ", callback_data="premium")
         ]
+    ]
 
-        await message.reply_photo(
-            photo=SHORTENER_PIC,
-            caption=SHORT_MSG,
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-
-    except Exception as e:
-        await message.reply_text(f"⚠️ Error generating short link:\n{e}")
+    await message.reply_photo(
+        photo=SHORTENER_PIC,
+        caption=SHORT_MSG,
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
 # ------------------------------
 # Start command handler
@@ -78,18 +73,18 @@ async def start_command(client: Client, message: Message):
     user_id = message.from_user.id
     is_premium = await is_premium_user(user_id)
 
-    # Add user if not present
+    # Add user to DB if not present
     if not await db.present_user(user_id):
         try:
             await db.add_user(user_id)
         except Exception:
             pass
 
-    # Force subscription check
+    # Force subscription
     if not await is_subscribed(client, user_id):
         return await not_joined(client, message)
 
-    # Banned user check
+    # Banned check
     banned_users = await db.get_ban_users()
     if user_id in banned_users:
         return await message.reply_text(
@@ -101,17 +96,14 @@ async def start_command(client: Client, message: Message):
         )
 
     text = message.text
-    FILE_AUTO_DELETE = await db.get_del_timer()
-
-    # Extract start payload (if any)
     start_payload = text.split(" ")[1] if len(text.split()) > 1 else None
 
     if start_payload:
-        # Step 1: generate short link & store verification time
+        # Generate short link OR send file if already clicked
         await short_url(client, message, start_payload)
-        return  # Stop further execution until user clicks the short link
+        return
 
-    # Step 2: No payload → send welcome message
+    # No payload → send welcome message
     await message.reply_photo(
         photo=START_PIC,
         caption=START_MSG.format(
@@ -134,12 +126,12 @@ async def start_command(client: Client, message: Message):
     )
 
 # ------------------------------
-# File access handler (after short link)
+# File access handler
 # ------------------------------
 async def handle_file_access(client: Client, message: Message, base64_string: str, is_premium: bool):
     user_id = message.from_user.id
 
-    # BYPASS DETECTION
+    # Check if verification was done
     if not is_premium and user_id != OWNER_ID:
         if user_id not in verify_cache or base64_string not in verify_cache[user_id]:
             await message.reply_text(
@@ -152,16 +144,12 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
             return
 
         # Check elapsed time
-        sent_time = verify_cache[user_id][base64_string]
+        sent_time = verify_cache[user_id][base64_string]["timestamp"]
         elapsed = time.time() - sent_time
 
         if elapsed < MIN_VERIFY_TIME:
             await message.reply_text(
                 f"⛔ Bypass Detected!\nPlease complete verification first.\nMinimum verification time: {MIN_VERIFY_TIME}s."
-            )
-            await client.send_message(
-                OWNER_ID,
-                f"⚠️ BYPASS ALERT!\nUser {message.from_user.mention} ({user_id}) clicked link too early.\nElapsed: {int(elapsed)}s for file `{base64_string}`."
             )
             return
 
@@ -172,11 +160,13 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
             )
             return
 
-    # DECODE PAYLOAD & FETCH FILES
+        # Mark as clicked
+        verify_cache[user_id][base64_string]["clicked"] = True
+
+    # Decode payload & fetch file IDs
     string = await decode(base64_string)
     argument = string.split("-")
     ids = []
-
     if len(argument) == 3:
         start = int(int(argument[1]) / abs(client.db_channel.id))
         end = int(int(argument[2]) / abs(client.db_channel.id))
@@ -184,17 +174,18 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
     elif len(argument) == 2:
         ids = [int(int(argument[1]) / abs(client.db_channel.id))]
 
-    # Fetch messages
+    # Fetch messages/files
     temp_msg = await message.reply("<b>Please wait...</b>")
     try:
         messages = await get_messages(client, ids)
     except Exception as e:
         await message.reply_text("Something went wrong while fetching files!")
-        print(f"Error getting messages: {e}")
+        print(f"Error: {e}")
         return
     finally:
         await temp_msg.delete()
 
+    # Copy messages to user
     codeflix_msgs = []
     for msg in messages:
         original_caption = msg.caption.html if msg.caption else ""
@@ -230,7 +221,6 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
         notification_msg = await message.reply(
             f"<b>This file will be deleted in {get_exp_time(FILE_AUTO_DELETE)}. Please save or forward it before it is deleted.</b>"
         )
-
         await asyncio.sleep(FILE_AUTO_DELETE)
         for snt_msg in codeflix_msgs:
             try:
@@ -251,6 +241,8 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
             )
         except Exception as e:
             print(f"Error updating notification: {e}")
+
+
 
 #=====================================================================================##
 # The rest of your handlers (premium commands, force-subscription, myplan, etc.) 
