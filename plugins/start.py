@@ -42,7 +42,7 @@ TUT_VID = f"{TUT_VID}"
 
 
 async def short_url(client: Client, message: Message, base64_string):
-    try:  # Add the try here to catch IndexError
+    try:
         user_id = message.from_user.id
 
         # Store generation time
@@ -50,9 +50,17 @@ async def short_url(client: Client, message: Message, base64_string):
             verify_cache[user_id] = {}
         verify_cache[user_id][base64_string] = time.time()
 
+        # Generate the link for the user
         prem_link = f"https://t.me/{client.username}?start=yu3elk{base64_string}7"
         short_link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, prem_link)
 
+        # ✅ Check if the short link was generated successfully
+        if not short_link:
+            return await message.reply_text(
+                "⚠️ Sorry, the short link could not be generated. Please try again later."
+            )
+
+        # Create buttons with valid short link
         buttons = [
             [
                 InlineKeyboardButton("ᴅᴏᴡɴʟᴏᴀᴅ", url=short_link),
@@ -63,13 +71,23 @@ async def short_url(client: Client, message: Message, base64_string):
             ]
         ]
 
+        # Send the photo with buttons
         await message.reply_photo(
             photo=SHORTENER_PIC,
             caption=SHORT_MSG,
             reply_markup=InlineKeyboardMarkup(buttons)
         )
+
     except IndexError:
-        pass  # Now this is valid
+        # Catch unexpected index errors (e.g., from get_shortlink parsing)
+        await message.reply_text(
+            "⚠️ Something went wrong while generating your link. Please try again."
+        )
+    except Exception as e:
+        # Catch all other exceptions to prevent bot crashes
+        await message.reply_text(
+            f"⚠️ An unexpected error occurred:\n{e}"
+    )
 
 
 
