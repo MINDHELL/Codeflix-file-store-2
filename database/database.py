@@ -217,6 +217,7 @@ class Rohit:
 
 # VERIFICATION MANAGEMENT
 
+
     async def db_verify_status(self, user_id):
         user = await self.user_data.find_one({'_id': user_id})
         if user:
@@ -273,7 +274,6 @@ class Rohit:
         ]
         result = await self.sex_data.aggregate(pipeline).to_list(length=1)
         return result[0]["total"] if result else 0
-
 
 
 
