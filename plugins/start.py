@@ -93,122 +93,124 @@ async def start_command(client: Client, message: Message):
     text = message.text or ""
 
     if len(message.command) > 1:
-        try:
-            basic = message.command[1]
-            verify_status = await db.get_verify_status(user_id) or {}
+    try:
+        basic = message.command[1]
+        verify_status = await db.get_verify_status(user_id) or {}
 
-            # ===============================
-            # 🔐 VERIFY TOKEN SYSTEM
-            # ===============================
+        # ===============================
+        # 🔐 VERIFY TOKEN SYSTEM
+        # ===============================
+        if basic.startswith("verify_"):
 
-            if basic.startswith("verify_"):
+            try:
+                _, uid, token = basic.split("_", 2)
+            except:
+                return await message.reply("⚠️ Invalid verification format.")
 
-                try:
-                    _, uid, token = basic.split("_", 2)
-                except:
-                    return await message.reply("⚠️ Invalid verification format.")
+            if int(uid) != user_id:
+                return await message.reply("⚠️ Token does not belong to you.")
 
-                if int(uid) != user_id:
-                    return await message.reply("⚠️ Token does not belong to you.")
+            if verify_status.get("verify_token") != token:
+                return await message.reply("⚠️ Invalid token.")
 
-                if verify_status.get("verify_token") != token:
-                    return await message.reply("⚠️ Invalid token.")
+            current_time = time.time()
+            created_at = verify_status.get("token_created_at", 0)
+            time_taken = current_time - created_at
 
-                current_time = time.time()
-                created_at = verify_status.get("token_created_at", 0)
-                time_taken = current_time - created_at
+            if time_taken < 3:
+                await db.add_ban_user(user_id)
+                return await message.reply("🚫 You are banned for bypassing.")
 
-                if time_taken < 3:
-                    await db.add_ban_user(user_id)
-                    return await message.reply("🚫 You are banned for bypassing.")
-
-                if time_taken < MIN_VERIFY_TIME:
-                    attempts = verify_status.get("bypass_attempts", 0) + 1
-
-                    await db.update_verify_status(
-                        user_id,
-                        bypass_attempts=attempts
-                    )
-
-                    if attempts >= MAX_BYPASS_ATTEMPTS:
-                        await db.add_ban_user(user_id)
-                        return await message.reply("🚫 Banned for repeated bypass attempts.")
-
-                    return await message.reply(
-                        f"🚫 Bypass detected!\nAttempt: {attempts}/3"
-                    )
-
-                if time_taken > MAX_VERIFY_TIME:
-                    return await message.reply("⚠️ Token expired. Generate new link.")
+            if time_taken < MIN_VERIFY_TIME:
+                attempts = verify_status.get("bypass_attempts", 0) + 1
 
                 await db.update_verify_status(
                     user_id,
-                    is_verified=True,
-                    verified_time=current_time
+                    bypass_attempts=attempts
                 )
 
-                return await message.reply("✅ Verification successful!")
+                if attempts >= MAX_BYPASS_ATTEMPTS:
+                    await db.add_ban_user(user_id)
+                    return await message.reply("🚫 Banned for repeated bypass attempts.")
 
-            # ===============================
-            # 🔐 NORMAL FILE REQUEST
-            # ===============================
+                return await message.reply(
+                    f"🚫 Bypass detected!\nAttempt: {attempts}/3"
+                )
 
-            if not is_premium and user_id != OWNER_ID:
+            if time_taken > MAX_VERIFY_TIME:
+                return await message.reply("⚠️ Token expired. Generate new link.")
 
-                if not verify_status.get("is_verified"):
-
-                    token = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
-
-                    await db.update_verify_status(
-                        user_id,
-                        verify_token=token,
-                        is_verified=False,
-                        token_created_at=time.time(),
-                        bypass_attempts=0
-                    )
-
-                    verify_link = f"https://t.me/{client.username}?start=verify_{user_id}_{token}"
-                    short_link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, verify_link)
-
-                    buttons = [
-                        [
-                            InlineKeyboardButton("ᴏᴘᴇɴ ʟɪɴᴋ", url=short_link),
-                            InlineKeyboardButton("ᴛᴜᴛᴏʀɪᴀʟ", url=TUT_VID)
-                        ]
-                    ]
-
-                    return await message.reply_photo(
-                photo=SHORTENER_PIC,
-                caption="🔐 Please complete verification to access file.",
-                reply_markup=InlineKeyboardMarkup(buttons)
+            await db.update_verify_status(
+                user_id,
+                is_verified=True,
+                verified_time=current_time
             )
 
-            base64_string = basic
+            return await message.reply("✅ Verification successful!")
+
+        # ===============================
+        # 🔐 NORMAL FILE REQUEST
+        # ===============================
+
+        if not is_premium and user_id != OWNER_ID:
+            if not verify_status.get("is_verified"):
+
+                token = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+
+                await db.update_verify_status(
+                    user_id,
+                    verify_token=token,
+                    is_verified=False,
+                    token_created_at=time.time(),
+                    bypass_attempts=0
+                )
+
+                verify_link = f"https://t.me/{client.username}?start=verify_{user_id}_{token}"
+                short_link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, verify_link)
+
+                buttons = [[
+                    InlineKeyboardButton("ᴏᴘᴇɴ ʟɪɴᴋ", url=short_link),
+                    InlineKeyboardButton("ᴛᴜᴛᴏʀɪᴀʟ", url=TUT_VID)
+                ]]
+
+                return await message.reply_photo(
+                    photo=SHORTENER_PIC,
+                    caption="🔐 Please complete verification to access file.",
+                    reply_markup=InlineKeyboardMarkup(buttons)
+                )
+
+        # If verified → continue file processing
+        base64_string = basic
+
+        string = await decode(base64_string)
+        argument = string.split("-")
 
     except Exception as e:
         print(f"Error processing start payload: {e}")
         return await message.reply_text("⚠️ Invalid or expired link.")
 
-    string = await decode(base64_string)
-    argument = string.split("-")
+    # ===============================
+    # 📂 FILE FETCH SECTION
+    # ===============================
 
-        ids = []
-        if len(argument) == 3:
-            try:
-                start = int(int(argument[1]) / abs(client.db_channel.id))
-                end = int(int(argument[2]) / abs(client.db_channel.id))
-                ids = range(start, end + 1) if start <= end else list(range(start, end - 1, -1))
-            except Exception as e:
-                print(f"Error decoding IDs: {e}")
-                return
+    ids = []
 
-        elif len(argument) == 2:
-            try:
-                ids = [int(int(argument[1]) / abs(client.db_channel.id))]
-            except Exception as e:
-                print(f"Error decoding ID: {e}")
-                return
+    if len(argument) == 3:
+        try:
+            start = int(int(argument[1]) / abs(client.db_channel.id))
+            end = int(int(argument[2]) / abs(client.db_channel.id))
+            ids = range(start, end + 1) if start <= end else list(range(start, end - 1, -1))
+        except Exception as e:
+            print(f"Error decoding IDs: {e}")
+            return
 
+    elif len(argument) == 2:
+        try:
+            ids = [int(int(argument[1]) / abs(client.db_channel.id))]
+        except Exception as e:
+            print(f"Error decoding ID: {e}")
+            return
+            
         temp_msg = await message.reply("<b>Please wait...</b>")
         try:
             messages = await get_messages(client, ids)
