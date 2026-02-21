@@ -18,6 +18,8 @@ default_verify = {
     'is_verified': False,
     'verified_time': 0,
     'verify_token': "",
+    'token_created_at': 0,
+    'bypass_attempts': 0,
     'link': ""
 }
 
@@ -25,10 +27,12 @@ def new_user(id):
     return {
         '_id': id,
         'verify_status': {
-            'is_verified': False,
-            'verified_time': "",
-            'verify_token': "",
-            'link': ""
+    'is_verified': False,
+    'verified_time': 0,
+    'verify_token': "",
+    'token_created_at': 0,
+    'bypass_attempts': 0,
+    'link': ""
         }
     }
 
@@ -227,13 +231,14 @@ class Rohit:
         verify = await self.db_verify_status(user_id)
         return verify
 
-    async def update_verify_status(self, user_id, verify_token="", is_verified=False, verified_time=0, link=""):
-        current = await self.db_verify_status(user_id)
-        current['verify_token'] = verify_token
-        current['is_verified'] = is_verified
-        current['verified_time'] = verified_time
-        current['link'] = link
-        await self.db_update_verify_status(user_id, current)
+    async def update_verify_status(self, user_id, **kwargs):
+    current = await self.db_verify_status(user_id)
+
+    for key, value in kwargs.items():
+        current[key] = value
+
+    await self.db_update_verify_status(user_id, current)
+    
 
     # Set verify count (overwrite with new value)
     async def set_verify_count(self, user_id: int, count: int):
