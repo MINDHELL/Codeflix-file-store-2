@@ -125,7 +125,7 @@ if basic.startswith("verify_"):
     time_taken = current_time - created_at
 
     if time_taken < 3:
-        await db.ban_user(user_id)
+        await db.add_ban_user(user_id)
         return await message.reply("🚫 You are banned for bypassing.")
 
     if time_taken < MIN_VERIFY_TIME:
@@ -137,7 +137,7 @@ if basic.startswith("verify_"):
         )
 
         if attempts >= MAX_BYPASS_ATTEMPTS:
-            await db.ban_user(user_id)
+            await db.add_ban_user(user_id)
             return await message.reply("🚫 Banned for repeated bypass attempts.")
 
         return await message.reply(
