@@ -31,6 +31,10 @@ from database.database import *
 from database.db_premium import *
 
 
+MIN_VERIFY_TIME = 80
+MAX_VERIFY_TIME = 600
+MAX_BYPASS_ATTEMPTS = 3
+
 BAN_SUPPORT = f"{BAN_SUPPORT}"
 TUT_VID = f"{TUT_VID}"
 
