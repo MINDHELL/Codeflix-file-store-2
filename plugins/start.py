@@ -178,20 +178,19 @@ async def start_command(client: Client, message: Message):
                     ]
 
                     return await message.reply_photo(
-                        photo=SHORTENER_PIC,
-                        caption="🔐 Please complete verification to access file.",
-                        reply_markup=InlineKeyboardMarkup(buttons)
-                    )
+                photo=SHORTENER_PIC,
+                caption="🔐 Please complete verification to access file.",
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
 
             base64_string = basic
 
-        except Exception as e:
-            print(f"Error processing start payload: {e}")
+    except Exception as e:
+        print(f"Error processing start payload: {e}")
+        return await message.reply_text("⚠️ Invalid or expired link.")
 
-        
-
-        string = await decode(base64_string)
-        argument = string.split("-")
+    string = await decode(base64_string)
+    argument = string.split("-")
 
         ids = []
         if len(argument) == 3:
