@@ -90,11 +90,11 @@ async def start_command(client: Client, message: Message):
         )
 
     FILE_AUTO_DELETE = await db.get_del_timer()
-    text = message.text
+    text = message.text or ""
 
-    if len(text) > 7:
+    if len(message.command) > 1:
         try:
-            basic = text.split(" ", 1)[1]
+            basic = message.command[1]
             verify_status = await db.get_verify_status(user_id) or {}
 
             # ===============================
