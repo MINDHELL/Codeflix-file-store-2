@@ -67,17 +67,16 @@ async def start_command(client: Client, message: Message):
     text = message.text or ""
     argument = None
 
+    # Add user if not exists
     if not await db.present_user(user_id):
-        try:
-            await db.add_user(user_id)
-        except:
-            pass
+        await db.add_user(user_id)
 
+    # Subscription check
     if not await is_subscribed(client, user_id):
         return await not_joined(client, message)
 
-    banned_users = await db.get_ban_users()
-    if user_id in banned_users:
+    # Ban check
+    if user_id in await db.get_ban_users():
         return await message.reply_text(
             "<b>⛔️ You are Bᴀɴɴᴇᴅ from using this bot.</b>\n<i>Contact support if this is a mistake.</i>",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Contact Support", url=BAN_SUPPORT)]])
@@ -85,11 +84,11 @@ async def start_command(client: Client, message: Message):
 
     FILE_AUTO_DELETE = await db.get_del_timer()
 
-    # Check if /start has a parameter
+    # Check /start parameter
     if len(message.command) > 1:
         basic = message.command[1]
 
-        # Only process verify tokens (file-specific)
+        # Process verify tokens (per-file)
         if basic.startswith("verify_"):
             try:
                 _, uid, token, file_token = basic.split("_", 3)
@@ -119,17 +118,14 @@ async def start_command(client: Client, message: Message):
                 return await message.reply("🚫 Bypass detected! Please verify the link.")
 
         else:
-            # It's a normal file request link (base64)
+            # Normal base64 link
             base64_string = basic
             string_data = await decode(base64_string)
             argument = string_data.split("-")
 
-    # ===============================
-    # 📂 FILE FETCH SECTION
-    # ===============================
+    # ================= FILE FETCH =================
     if argument:
         ids = []
-
         if len(argument) == 3:
             start = int(int(argument[1]) / abs(client.db_channel.id))
             end = int(int(argument[2]) / abs(client.db_channel.id))
@@ -153,7 +149,7 @@ async def start_command(client: Client, message: Message):
 
             try:
                 snt_msg = await msg.copy(
-                    chat_id=message.from_user.id,
+                    chat_id=user_id,
                     caption=caption,
                     parse_mode=ParseMode.HTML,
                     reply_markup=reply_markup,
@@ -164,7 +160,7 @@ async def start_command(client: Client, message: Message):
             except FloodWait as e:
                 await asyncio.sleep(e.x)
                 copied_msg = await msg.copy(
-                    chat_id=message.from_user.id,
+                    chat_id=user_id,
                     caption=caption,
                     parse_mode=ParseMode.HTML,
                     reply_markup=reply_markup,
@@ -209,8 +205,55 @@ async def start_command(client: Client, message: Message):
         )
         return
 
+# ================= VERIFY BUTTON CALLBACK =================
+@Bot.on_callback_query(filters.regex(r'^verify_(.+)'))
+async def verify_file_callback(client: Client, callback: CallbackQuery):
+    user_id = callback.from_user.id
+    data = callback.data
+    file_token = data.split("_", 1)[1]
 
+    # Check if user already verified
+    verify_status = await db.get_file_verify_status(user_id, file_token)
+    if verify_status.get("is_verified"):
+        await callback.answer("✅ Already verified!", show_alert=True)
+        return
 
+    try:
+        # Update DB: mark file as verified
+        await db.update_file_verify_status(user_id, file_token, {
+            "is_verified": True,
+            "verified_time": int(time.time())
+        })
+
+        await callback.answer("🎉 Verification successful! You can now access the file.", show_alert=True)
+
+        # Auto-send file after verification
+        argument = file_token.split("-")
+        if argument:
+            ids = []
+            if len(argument) == 3:
+                start = int(int(argument[1]) / abs(client.db_channel.id))
+                end = int(int(argument[2]) / abs(client.db_channel.id))
+                ids = range(start, end + 1) if start <= end else list(range(start, end - 1, -1))
+            elif len(argument) == 2:
+                ids = [int(int(argument[1]) / abs(client.db_channel.id))]
+
+            codeflix_msgs = []
+            for msg in await get_messages(client, ids):
+                try:
+                    snt_msg = await msg.copy(
+                        chat_id=user_id,
+                        caption=f"{msg.caption.html if msg.caption else ''}\n\n{CUSTOM_CAPTION}" if CUSTOM_CAPTION else (msg.caption.html if msg.caption else ""),
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=msg.reply_markup if DISABLE_CHANNEL_BUTTON else None,
+                        protect_content=PROTECT_CONTENT
+                    )
+                    codeflix_msgs.append(snt_msg)
+                except:
+                    pass
+
+    except Exception as e:
+        await callback.answer(f"❌ Verification failed: {str(e)}", show_alert=True)
 
 
 
