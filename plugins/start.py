@@ -97,56 +97,62 @@ async def start_command(client: Client, message: Message):
             basic = message.command[1]
             verify_status = await db.get_verify_status(user_id) or {}
 
-        # ===============================
-        # 🔐 VERIFY TOKEN SYSTEM
-        # ===============================
-        if basic.startswith("verify_"):
+            # ===============================
+            # 🔐 VERIFY TOKEN SYSTEM
+            # ===============================
+            if basic.startswith("verify_"):
 
-            try:
-                _, uid, token = basic.split("_", 2)
-            except:
-                return await message.reply("⚠️ Invalid verification format.")
+                try:
+                    _, uid, token = basic.split("_", 2)
+                except:
+                    return await message.reply("⚠️ Invalid verification format.")
 
-            if int(uid) != user_id:
-                return await message.reply("⚠️ Token does not belong to you.")
+                if int(uid) != user_id:
+                    return await message.reply("⚠️ Token does not belong to you.")
 
-            if verify_status.get("verify_token") != token:
-                return await message.reply("⚠️ Invalid token.")
+                if verify_status.get("verify_token") != token:
+                    return await message.reply("⚠️ Invalid token.")
 
-            current_time = time.time()
-            created_at = verify_status.get("token_created_at", 0)
-            time_taken = current_time - created_at
+                current_time = time.time()
+                created_at = verify_status.get("token_created_at", 0)
+                time_taken = current_time - created_at
 
-            if time_taken < 3:
-                await db.add_ban_user(user_id)
-                return await message.reply("🚫 You are banned for bypassing.")
+                if time_taken < 3:
+                    await db.add_ban_user(user_id)
+                    return await message.reply("🚫 You are banned for bypassing.")
 
-            if time_taken < MIN_VERIFY_TIME:
-                attempts = verify_status.get("bypass_attempts", 0) + 1
+                if time_taken < MIN_VERIFY_TIME:
+                    attempts = verify_status.get("bypass_attempts", 0) + 1
+
+                    await db.update_verify_status(
+                        user_id,
+                        bypass_attempts=attempts
+                    )
+
+                    if attempts >= MAX_BYPASS_ATTEMPTS:
+                        await db.add_ban_user(user_id)
+                        return await message.reply("🚫 Banned for repeated bypass attempts.")
+
+                    return await message.reply(
+                        f"🚫 Bypass detected!\nAttempt: {attempts}/3"
+                    )
+
+                if time_taken > MAX_VERIFY_TIME:
+                    return await message.reply("⚠️ Token expired. Generate new link.")
 
                 await db.update_verify_status(
                     user_id,
-                    bypass_attempts=attempts
+                    is_verified=True,
+                    verified_time=current_time
                 )
 
-                if attempts >= MAX_BYPASS_ATTEMPTS:
-                    await db.add_ban_user(user_id)
-                    return await message.reply("🚫 Banned for repeated bypass attempts.")
+                return await message.reply("✅ Verification successful!")
 
-                return await message.reply(
-                    f"🚫 Bypass detected!\nAttempt: {attempts}/3"
-                )
+        except Exception as e:
+            print(f"Error in start command: {e}")
+            return await message.reply("⚠️ Something went wrong.")
 
-            if time_taken > MAX_VERIFY_TIME:
-                return await message.reply("⚠️ Token expired. Generate new link.")
-
-            await db.update_verify_status(
-                user_id,
-                is_verified=True,
-                verified_time=current_time
-            )
-
-            return await message.reply("✅ Verification successful!")
+        
 
         # ===============================
         # 🔐 NORMAL FILE REQUEST
