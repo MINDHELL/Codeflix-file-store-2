@@ -190,11 +190,7 @@ async def start_command(client: Client, message: Message):
 
         string = await decode(base64_string)
         argument = string.split("-")
-
-    except Exception as e:
-        print(f"Error processing start payload: {e}")
-        return await message.reply_text("⚠️ Invalid or expired link.")
-
+        
     # ===============================
     # 📂 FILE FETCH SECTION
     # ===============================
