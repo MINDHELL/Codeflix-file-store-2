@@ -66,18 +66,15 @@ async def start_command(client: Client, message: Message):
     user_id = message.from_user.id
     is_premium = await is_premium_user(user_id)
 
-    # Add user to DB if not present
     if not await db.present_user(user_id):
         try:
             await db.add_user(user_id)
         except:
             pass
 
-    # Subscription check
     if not await is_subscribed(client, user_id):
         return await not_joined(client, message)
 
-    # Banned users
     banned_users = await db.get_ban_users()
     if user_id in banned_users:
         return await message.reply_text(
@@ -86,17 +83,12 @@ async def start_command(client: Client, message: Message):
         )
 
     FILE_AUTO_DELETE = await db.get_del_timer()
-    text = message.text or ""
-
     argument = None
 
     # Check for start parameter
     if len(message.command) > 1:
         basic = message.command[1]
         verify_status = await db.get_verify_status(user_id) or {}
-        # Make sure links dict exists
-        if "links" not in verify_status:
-            verify_status["links"] = {}
 
         # ===============================
         # 🔐 VERIFY TOKEN SYSTEM
@@ -122,34 +114,21 @@ async def start_command(client: Client, message: Message):
                 return await message.reply("🚫 You are banned for bypassing.")
 
             if time_taken < MIN_VERIFY_TIME:
-                # Track bypass attempts per link
-                if basic not in verify_status["links"]:
-                    verify_status["links"][basic] = {"bypass_attempts": 0}
-
-                attempts = verify_status["links"][basic]["bypass_attempts"] + 1
-                verify_status["links"][basic]["bypass_attempts"] = attempts
-                await db.update_verify_status(user_id, links=verify_status["links"])
-
-                # ⚠️ Notify owner
+                # Notify owner about bypass
                 try:
                     await client.send_message(
                         chat_id=OWNER_ID,
                         text=(
-                            f"⚠️ User Bypass Detected!\n\n"
+                            f"⚠️ Bypass Detected!\n\n"
                             f"User: {message.from_user.mention} (<code>{user_id}</code>)\n"
                             f"Link: <code>{basic}</code>\n"
-                            f"Attempt: {attempts}/{MAX_BYPASS_ATTEMPTS}\n"
                             f"Time Taken: {time_taken:.2f}s"
                         )
                     )
                 except Exception as e:
                     print(f"Error sending bypass notification: {e}")
 
-                if attempts >= MAX_BYPASS_ATTEMPTS:
-                    await db.add_ban_user(user_id)
-                    return await message.reply("🚫 Banned for repeated bypass attempts.")
-
-                return await message.reply(f"🚫 Bypass detected!\nAttempt: {attempts}/3")
+                return await message.reply("🚫 Bypass detected! Please verify the link.")
 
             if time_taken > MAX_VERIFY_TIME:
                 return await message.reply("⚠️ Token expired. Generate new link.")
@@ -162,14 +141,12 @@ async def start_command(client: Client, message: Message):
         # ===============================
         if not is_premium and user_id != OWNER_ID:
             if not verify_status.get("is_verified"):
-                # Generate new per-link token
                 token = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
                 await db.update_verify_status(
                     user_id,
                     verify_token=token,
                     is_verified=False,
-                    token_created_at=time.time(),
-                    bypass_attempts=0
+                    token_created_at=time.time()
                 )
                 verify_link = f"https://t.me/{client.username}?start=verify_{user_id}_{token}"
                 short_link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, verify_link)
@@ -185,7 +162,6 @@ async def start_command(client: Client, message: Message):
                     reply_markup=InlineKeyboardMarkup(buttons)
                 )
 
-        # Decode link for file fetching
         base64_string = basic
         string_data = await decode(base64_string)
         argument = string_data.split("-")
@@ -196,39 +172,31 @@ async def start_command(client: Client, message: Message):
     if argument:
         ids = []
 
-        # Batch file
         if len(argument) == 3:
             try:
                 start = int(int(argument[1]) / abs(client.db_channel.id))
                 end = int(int(argument[2]) / abs(client.db_channel.id))
                 ids = range(start, end + 1) if start <= end else list(range(start, end - 1, -1))
-            except Exception as e:
-                print(f"Error decoding IDs: {e}")
+            except:
                 return
-
-        # Single file
         elif len(argument) == 2:
             try:
                 ids = [int(int(argument[1]) / abs(client.db_channel.id))]
-            except Exception as e:
-                print(f"Error decoding ID: {e}")
+            except:
                 return
 
         temp_msg = await message.reply("<b>Please wait...</b>")
         try:
             messages = await get_messages(client, ids)
-        except Exception as e:
+        except:
             await message.reply_text("Something went wrong!")
-            print(f"Error getting messages: {e}")
             return
         finally:
             await temp_msg.delete()
 
         codeflix_msgs = []
-
         for msg in messages:
-            original_caption = msg.caption.html if msg.caption else ""
-            caption = f"{original_caption}\n\n{CUSTOM_CAPTION}" if CUSTOM_CAPTION else original_caption
+            caption = f"{msg.caption.html if msg.caption else ''}\n\n{CUSTOM_CAPTION}" if CUSTOM_CAPTION else (msg.caption.html if msg.caption else "")
             reply_markup = msg.reply_markup if DISABLE_CHANNEL_BUTTON else None
 
             try:
@@ -254,32 +222,29 @@ async def start_command(client: Client, message: Message):
             except:
                 pass
 
-        # Auto delete after FILE_AUTO_DELETE
         if FILE_AUTO_DELETE > 0:
             notification_msg = await message.reply(
-                f"<b>Tʜɪs Fɪʟᴇ ᴡɪʟʟ ʙᴇ Dᴇʟᴇᴛᴇᴅ ɪɴ  {get_exp_time(FILE_AUTO_DELETE)}. Pʟᴇᴀsᴇ sᴀᴠᴇ ᴏʀ ғᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ʙᴇғᴏʀᴇ ɪᴛ ɢᴇᴛs Dᴇʟᴇᴛᴇᴅ.</b>"
+                f"<b>This file will be deleted in {get_exp_time(FILE_AUTO_DELETE)}. Save it before it gets deleted.</b>"
             )
             await asyncio.sleep(FILE_AUTO_DELETE)
-
             for snt_msg in codeflix_msgs:
                 if snt_msg:
                     try:
                         await snt_msg.delete()
-                    except Exception as e:
-                        print(f"Error deleting message {snt_msg.id}: {e}")
-
+                    except:
+                        pass
             try:
                 reload_url = f"https://t.me/{client.username}?start={message.command[1]}" if message.command and len(message.command) > 1 else None
                 keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("ɢᴇᴛ ғɪʟᴇ ᴀɢᴀɪɴ!", url=reload_url)]]) if reload_url else None
                 await notification_msg.edit(
-                    "<b>ʏᴏᴜʀ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ ɪꜱ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ !!\n\nᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ᴅᴇʟᴇᴛᴇᴅ ᴠɪᴅᴇᴏ / ꜰɪʟᴇ 👇</b>",
+                    "<b>Your file was deleted! Click below to get it again 👇</b>",
                     reply_markup=keyboard
                 )
-            except Exception as e:
-                print(f"Error updating notification with 'Get File Again' button: {e}")
+            except:
+                pass
 
     else:
-        # Start without parameters → show start message
+        # No parameter → show start message
         reply_markup = InlineKeyboardMarkup(
             [
                 [InlineKeyboardButton("• ᴍᴏʀᴇ ᴄʜᴀɴɴᴇʟs •", url="https://t.me/Nova_Flix/50")],
@@ -297,9 +262,11 @@ async def start_command(client: Client, message: Message):
                 id=message.from_user.id
             ),
             reply_markup=reply_markup,
-            message_effect_id=5104841245755180586  # 🔥
+            message_effect_id=5104841245755180586
         )
         return
+
+
 
 
 
