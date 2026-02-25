@@ -97,7 +97,7 @@ async def start_command(client: Client, message: Message):
 
     text = message.text
     start_payload = text.split(" ")[1] if len(text.split()) > 1 else None
-
+    
     if start_payload:
     # Check if it's verification return link
     if start_payload.startswith("yu3elk") and start_payload.endswith("7"):
