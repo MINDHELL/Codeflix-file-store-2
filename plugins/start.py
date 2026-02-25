@@ -97,19 +97,19 @@ async def start_command(client: Client, message: Message):
 
     text = message.text
     start_payload = text.split(" ")[1] if len(text.split()) > 1 else None
-    
+
     if start_payload:
-    # Check if it's verification return link
-    if start_payload.startswith("yu3elk") and start_payload.endswith("7"):
-        real_payload = start_payload[6:-1]  # remove prefix & suffix
-        await handle_file_access(client, message, real_payload, is_premium=False)
-    else:
-        # Normal first time request
-        if is_premium:
-            await handle_file_access(client, message, start_payload, is_premium=True)
+        # Check if it's verification return link
+        if start_payload.startswith("yu3elk") and start_payload.endswith("7"):
+            real_payload = start_payload[6:-1]
+            await handle_file_access(client, message, real_payload, is_premium=False)
         else:
-            await short_url(client, message, start_payload)
-    return
+            if is_premium:
+                await handle_file_access(client, message, start_payload, is_premium=True)
+            else:
+                await short_url(client, message, start_payload)
+        return
+
     # No payload → send welcome message
     await message.reply_photo(
         photo=START_PIC,
@@ -131,6 +131,8 @@ async def start_command(client: Client, message: Message):
         ),
         message_effect_id=5104841245755180586
     )
+
+
 
 # ------------------------------
 # File access handler
