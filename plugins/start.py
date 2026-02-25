@@ -99,9 +99,18 @@ async def start_command(client: Client, message: Message):
     start_payload = text.split(" ")[1] if len(text.split()) > 1 else None
 
     if start_payload:
-        # Generate short link OR send file if already clicked
-        await short_url(client, message, start_payload)
-        return
+    # Check if it's verification return link
+    if start_payload.startswith("yu3elk") and start_payload.endswith("7"):
+        real_payload = start_payload[6:-1]  # remove prefix & suffix
+        await handle_file_access(client, message, real_payload, is_premium=False)
+    else:
+        # Normal first time request
+        if is_premium:
+            await handle_file_access(client, message, start_payload, is_premium=True)
+        else:
+            await short_url(client, message, start_payload)
+    return
+    
 
     # No payload → send welcome message
     await message.reply_photo(
