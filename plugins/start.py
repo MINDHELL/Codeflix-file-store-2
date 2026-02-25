@@ -142,49 +142,69 @@ async def start_command(client: Client, message: Message):
 # ------------------------------
 # File access handler (Mongo Based Per File)
 # ------------------------------
+# ------------------------------
+# File access handler (FIXED & CLEAN)
+# ------------------------------
 async def handle_file_access(client: Client, message: Message, base64_string: str, is_premium: bool):
 
     user_id = message.from_user.id
 
-    # Verification required (non premium & non owner)
+    # =============================
+    # 🔐 VERIFICATION SECTION
+    # =============================
     if not is_premium and user_id != OWNER_ID:
 
         verify = await db.get_verify_status(user_id)
 
-        # No verification record
+        # 1️⃣ No record OR wrong token
         if not verify or verify.get("verify_token") != base64_string:
             await message.reply_text(
                 "⛔ Bypass Detected!\nYou must click the short link first."
             )
+
             await client.send_message(
                 OWNER_ID,
-                f"⚠️ BYPASS ALERT!\nUser {message.from_user.mention} ({user_id}) tried accessing `{base64_string}` without verification."
+                f"⚠️ BYPASS ALERT!\n\n"
+                f"User: {message.from_user.mention}\n"
+                f"User ID: {user_id}\n"
+                f"File Token: {base64_string}"
             )
             return
 
         sent_time = int(verify.get("verified_time", 0))
         elapsed = int(time.time()) - sent_time
 
-        # Minimum time check
-        if elapsed < MIN_VERIFY_TIME:
-            await message.reply_text(
-                f"⛔ Bypass Detected!\nMinimum verification time: {MIN_VERIFY_TIME}s."
-            )
-            return
-
-        # Expiry check
+        # 2️⃣ Expired check (MUST BE BEFORE MIN CHECK)
         if elapsed > MAX_VERIFY_TIME:
-            await db.update_verify_status(user_id)  # reset
+            await db.update_verify_status(
+                user_id,
+                verify_token="",
+                is_verified=False,
+                verified_time=0,
+                link=""
+            )
+
             await message.reply_text(
                 "⏰ Link Expired!\nPlease generate a new link."
             )
             return
 
-        # Increase verify count
-        count = await db.get_verify_count(user_id)
-        await db.set_verify_count(user_id, count + 1)
+        # 3️⃣ Minimum verification time check
+        if elapsed < MIN_VERIFY_TIME:
+            await message.reply_text(
+                f"⛔ Bypass Detected!\nMinimum verification time: {MIN_VERIFY_TIME} seconds."
+            )
 
-        # Clear token (one-time use)
+            await client.send_message(
+                OWNER_ID,
+                f"⚠️ FAST VERIFY ALERT!\n\n"
+                f"User: {message.from_user.mention}\n"
+                f"User ID: {user_id}\n"
+                f"Time Taken: {elapsed}s"
+            )
+            return
+
+        # 4️⃣ SUCCESS → Clear token (one-time use)
         await db.update_verify_status(
             user_id,
             verify_token="",
@@ -193,32 +213,51 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
             link=""
         )
 
-    # Decode payload
-    string = await decode(base64_string)
-    argument = string.split("-")
-    ids = []
+        # Increase verify count
+        count = await db.get_verify_count(user_id)
+        await db.set_verify_count(user_id, count + 1)
 
-    if len(argument) == 3:
-        start = int(int(argument[1]) / abs(client.db_channel.id))
-        end = int(int(argument[2]) / abs(client.db_channel.id))
-        ids = range(start, end + 1) if start <= end else range(start, end - 1, -1)
+    # =============================
+    # 📂 FILE DECODE SECTION
+    # =============================
+    try:
+        string = await decode(base64_string)
+        argument = string.split("-")
+        ids = []
 
-    elif len(argument) == 2:
-        ids = [int(int(argument[1]) / abs(client.db_channel.id))]
+        if len(argument) == 3:
+            start = int(int(argument[1]) / abs(client.db_channel.id))
+            end = int(int(argument[2]) / abs(client.db_channel.id))
+            ids = range(start, end + 1) if start <= end else range(start, end - 1, -1)
 
-    # Fetch files
+        elif len(argument) == 2:
+            ids = [int(int(argument[1]) / abs(client.db_channel.id))]
+
+    except Exception as e:
+        print(f"Decode Error: {e}")
+        return await message.reply_text("❌ Invalid file link.")
+
+    # =============================
+    # 📥 FETCH FILES
+    # =============================
     temp_msg = await message.reply("<b>Please wait...</b>")
+
     try:
         messages = await get_messages(client, ids)
     except Exception as e:
-        await message.reply_text("Something went wrong while fetching files!")
-        print(f"Error: {e}")
-        return
-    finally:
         await temp_msg.delete()
+        print(f"Fetch Error: {e}")
+        return await message.reply_text("❌ Something went wrong while fetching files!")
+    finally:
+        try:
+            await temp_msg.delete()
+        except:
+            pass
 
-    # Send files
-    codeflix_msgs = []
+    # =============================
+    # 📤 SEND FILES
+    # =============================
+    sent_messages = []
 
     for msg in messages:
         original_caption = msg.caption.html if msg.caption else ""
@@ -233,8 +272,8 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
                 reply_markup=reply_markup,
                 protect_content=PROTECT_CONTENT
             )
+            sent_messages.append(sent)
             await asyncio.sleep(0.5)
-            codeflix_msgs.append(sent)
 
         except FloodWait as e:
             await asyncio.sleep(e.x)
@@ -245,31 +284,36 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
                 reply_markup=reply_markup,
                 protect_content=PROTECT_CONTENT
             )
-            codeflix_msgs.append(sent)
+            sent_messages.append(sent)
 
-        except:
-            pass
+        except Exception as e:
+            print(f"Send Error: {e}")
 
-    # Auto delete
+    # =============================
+    # 🗑 AUTO DELETE SECTION (FIXED)
+    # =============================
     FILE_AUTO_DELETE = await db.get_del_timer()
 
     if FILE_AUTO_DELETE > 0:
+
         notification = await message.reply(
             f"<b>This file will be deleted in {get_exp_time(FILE_AUTO_DELETE)}.</b>"
         )
 
         await asyncio.sleep(FILE_AUTO_DELETE)
 
-        for sent in codeflix_msgs:
+        for sent in sent_messages:
             try:
                 await sent.delete()
             except:
                 pass
 
         try:
-            await notification.edit("<b>Your file was successfully deleted!</b>")
-        except:
-            pass
+            await notification.edit(
+                "<b>Your file was successfully deleted!</b>"
+            )
+        except Exception as e:
+            print(f"Notification Edit Error: {e}")
             
         # Reload button
         reload_url = f"https://t.me/{client.username}?start={message.command[1]}" if message.command and len(message.command) > 1 else None
