@@ -110,8 +110,6 @@ async def start_command(client: Client, message: Message):
         else:
             await short_url(client, message, start_payload)
     return
-    
-
     # No payload → send welcome message
     await message.reply_photo(
         photo=START_PIC,
