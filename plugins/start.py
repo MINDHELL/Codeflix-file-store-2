@@ -26,6 +26,12 @@ verify_cache = {}  # {user_id: {base64_string: {"timestamp": t, "clicked": bool}
 BAN_SUPPORT = f"{BAN_SUPPORT}"
 TUT_VID = f"{TUT_VID}"
 
+@Bot.on_message(filters.command("test") & filters.private)
+async def test_cmd(client, message):
+    await message.reply("Test working")
+
+
+
 
 # ------------------------------
 # Short URL generator (Mongo Based)
@@ -373,10 +379,6 @@ async def premium_cmd(client, message):
         token,
         is_premium=True
     )
-
-@Bot.on_message(filters.command("test"))
-async def test_cmd(client, message):
-    await message.reply("Test working")
 
 
 
