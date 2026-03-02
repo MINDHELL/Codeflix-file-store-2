@@ -104,47 +104,42 @@ async def start_command(client: Client, message: Message):
         )
 
     text = message.text
-    start_payload = text.split(" ")[1] if len(text.split()) > 1 else None
+    parts = text.split()
+    start_payload = parts[1] if len(parts) > 1 else None
 
     if start_payload:
 
-    # 🔹 Check if special link (FREE / PREMIUM)
-    special = await db.get_special_link(start_payload)
+        # 🔹 Special links
+        special = await db.get_special_link(start_payload)
+        if special:
+            original_token = special["original_token"]
+            mode = special["mode"]
 
-    if special:
-        original_token = special["original_token"]
-        mode = special["mode"]
+            if mode == "free":
+                await handle_file_access(client, message, original_token, True)
+                return
 
-        # FREE LINK
-        if mode == "free":
-            await handle_file_access(client, message, original_token, is_premium=True)
+            if mode == "premium":
+                if not is_premium:
+                    return await message.reply("❌ This link is only for Premium users.")
+                await handle_file_access(client, message, original_token, True)
+                return
+
+        # 🔹 Verification return link
+        if start_payload.startswith("yu3elk") and start_payload.endswith("7"):
+            real_payload = start_payload[6:-1]
+            await handle_file_access(client, message, real_payload, False)
             return
 
-        # PREMIUM LINK
-        if mode == "premium":
-            if not is_premium:
-                return await message.reply("❌ This link is only for Premium users.")
+        # 🔹 Normal file access
+        if is_premium:
+            await handle_file_access(client, message, start_payload, True)
+        else:
+            await short_url(client, message, start_payload)
 
-            await handle_file_access(client, message, original_token, is_premium=True)
-            return
-
-    # 🔹 Verification return link
-    if start_payload.startswith("yu3elk") and start_payload.endswith("7"):
-        real_payload = start_payload[6:-1]
-        await handle_file_access(client, message, real_payload, is_premium=False)
         return
 
-    # 🔹 Normal file access
-    if is_premium:
-        await handle_file_access(client, message, start_payload, is_premium=True)
-    else:
-        await short_url(client, message, start_payload)
-
-    return
-
-    
-
-    # Welcome message
+    # 🔹 Welcome message (only when no payload)
     await message.reply_photo(
         photo=START_PIC,
         caption=START_MSG.format(
@@ -164,8 +159,9 @@ async def start_command(client: Client, message: Message):
             ]
         ),
         message_effect_id=5104841245755180586
-                                    )
-    
+    )
+
+
 
 # ------------------------------
 # File access handler (Mongo Based Per File)
