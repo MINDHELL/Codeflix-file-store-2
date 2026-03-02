@@ -114,9 +114,9 @@ async def start_command(client: Client, message: Message):
         )
 
     if message.command[0] != "start":
-    return  # ignore other commands
+        return  # ignore other commands
 
-start_payload = message.command[1] if len(message.command) > 1 else None
+    start_payload = message.command[1] if len(message.command) > 1 else None
 
     if start_payload:
 
@@ -135,6 +135,8 @@ start_payload = message.command[1] if len(message.command) > 1 else None
                     return await message.reply("❌ This link is only for Premium users.")
                 await handle_file_access(client, message, original_token, True)
                 return
+
+        
 
         # 🔹 Verification return link
         if start_payload.startswith("yu3elk") and start_payload.endswith("7"):
