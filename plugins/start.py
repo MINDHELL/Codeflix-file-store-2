@@ -25,7 +25,6 @@ MAX_VERIFY_TIME = 600
 verify_cache = {}  # {user_id: {base64_string: {"timestamp": t, "clicked": bool}}}
 BAN_SUPPORT = f"{BAN_SUPPORT}"
 TUT_VID = f"{TUT_VID}"
-BOT_USERNAME = TescgsttBot
 
 
 @Bot.on_message(filters.command("test") & filters.private)
@@ -388,7 +387,7 @@ async def generate_free_link(client, message):
 
     new_token = await db.create_special_link(original_token, "free")
 
-    link = f"https://t.me/{BOT_USERNAME}?start={new_token}"
+    link = f"https://t.me/{client.username}?start={new_token}"
 
     await message.reply(f"✅ FREE LINK:\n\n{link}")
 
@@ -409,7 +408,7 @@ async def generate_premium_link(client, message):
 
     new_token = await db.create_special_link(original_token, "premium")
 
-    link = f"https://t.me/{BOT_USERNAME}?start={new_token}"
+    link = f"https://t.me/{client.username}?start={new_token}"
 
     await message.reply(f"💎 PREMIUM LINK:\n\n{link}")
 
