@@ -374,6 +374,9 @@ async def premium_cmd(client, message):
         is_premium=True
     )
 
+@Bot.on_message(filters.command("test"))
+async def test_cmd(client, message):
+    await message.reply("Test working")
 
 
 
