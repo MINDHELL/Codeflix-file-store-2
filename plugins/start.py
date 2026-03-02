@@ -30,6 +30,16 @@ TUT_VID = f"{TUT_VID}"
 async def test_cmd(client, message):
     await message.reply("Test working")
 
+@Bot.on_message(filters.command("checkowner") & filters.private)
+async def check_owner(client, message):
+    await message.reply(
+        f"Your ID: {message.from_user.id}\n"
+        f"Config OWNER_ID: {OWNER_ID}\n"
+        f"Equal? {message.from_user.id == OWNER_ID}"
+    )
+
+
+
 
 
 
