@@ -343,46 +343,6 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
 #=====================================================================================##
 
 
-@Bot.on_message(filters.command("free") & filters.private)
-async def free_cmd(client, message):
-
-    if len(message.command) < 2:
-        return await message.reply("Usage:\n/free FILE_ID")
-
-    token = message.command[1]
-
-    await handle_file_access(
-        client,
-        message,
-        token,
-        is_premium=True  # skip verification
-    )
-
-@Bot.on_message(filters.command("premium") & filters.private)
-async def premium_cmd(client, message):
-
-    if len(message.command) < 2:
-        return await message.reply("Usage:\n/premium FILE_ID")
-
-    user_id = message.from_user.id
-
-    if not await is_premium_user(user_id):
-        return await message.reply(
-            "❌ This is a premium file.\n\nBuy premium to access."
-        )
-
-    token = message.command[1]
-
-    await handle_file_access(
-        client,
-        message,
-        token,
-        is_premium=True
-    )
-
-
-
-
 
 
 
