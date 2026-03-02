@@ -342,6 +342,44 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
 # remain the same, as they are already correct.
 #=====================================================================================##
 
+@Bot.on_message(filters.command("free") & filters.private)
+async def generate_free_link(client, message):
+
+    if message.from_user.id != OWNER_ID:
+        return await message.reply("Only owner can use this.")
+
+    if len(message.command) < 2:
+        return await message.reply("Usage:\n/free TOKEN")
+
+    original_token = message.command[1]
+
+    new_token = await db.create_special_link(original_token, "free")
+
+    link = f"https://t.me/{BOT_USERNAME}?start={new_token}"
+
+    await message.reply(f"✅ FREE LINK:\n\n{link}")
+
+
+
+
+
+@Bot.on_message(filters.command("premium") & filters.private)
+async def generate_premium_link(client, message):
+
+    if message.from_user.id != OWNER_ID:
+        return await message.reply("Only owner can use this.")
+
+    if len(message.command) < 2:
+        return await message.reply("Usage:\n/premium TOKEN")
+
+    original_token = message.command[1]
+
+    new_token = await db.create_special_link(original_token, "premium")
+
+    link = f"https://t.me/{BOT_USERNAME}?start={new_token}"
+
+    await message.reply(f"💎 PREMIUM LINK:\n\n{link}")
+
 
 
 
