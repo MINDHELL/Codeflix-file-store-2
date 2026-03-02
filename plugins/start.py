@@ -113,9 +113,10 @@ async def start_command(client: Client, message: Message):
             )
         )
 
-    text = message.text
-    parts = text.split()
-    start_payload = parts[1] if len(parts) > 1 else None
+    if message.command[0] != "start":
+    return  # ignore other commands
+
+start_payload = message.command[1] if len(message.command) > 1 else None
 
     if start_payload:
 
