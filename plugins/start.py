@@ -328,7 +328,7 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
         ) if reload_url else None
 
         try:
-            await notification_msg.edit(
+            await notification_.edit(
                 "<b>Your video/file was successfully deleted!</b>",
                 reply_markup=keyboard
             )
