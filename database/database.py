@@ -5,6 +5,7 @@ import motor, asyncio
 import motor.motor_asyncio
 import time
 import pymongo, os
+import secrets
 from config import DB_URI, DB_NAME
 import logging
 from datetime import datetime, timedelta
@@ -32,7 +33,8 @@ def new_user(id):
         }
     }
 
-    class Rohit:
+
+class Rohit:
 
     def __init__(self, DB_URI, DB_NAME):
         self.dbclient = motor.motor_asyncio.AsyncIOMotorClient(DB_URI)
@@ -50,7 +52,6 @@ def new_user(id):
         self.rqst_fsub_Channel_data = self.database['request_forcesub_channel']
         self.special_links = self.database['special_links']
 
-
     # Create special link
     async def create_special_link(self, original_token: str, mode: str):
         new_token = secrets.token_urlsafe(16)
@@ -63,14 +64,10 @@ def new_user(id):
 
         return new_token
 
-    
-
-
     # Get special link
     async def get_special_link(self, token: str):
         return await self.special_links.find_one({"_id": token})
 
- 
     # USER DATA
     async def present_user(self, user_id: int):
         found = await self.user_data.find_one({'_id': user_id})
@@ -88,6 +85,8 @@ def new_user(id):
     async def del_user(self, user_id: int):
         await self.user_data.delete_one({'_id': user_id})
         return
+
+    
         
     # ADMIN DATA
     async def admin_exist(self, admin_id: int):
