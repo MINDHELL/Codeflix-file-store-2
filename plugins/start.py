@@ -337,9 +337,6 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
 #=====================================================================================##
 
 
-# ===============================
-# FREE COMMAND
-# ===============================
 @Bot.on_message(filters.command("free") & filters.private)
 async def free_cmd(client, message):
 
@@ -352,13 +349,9 @@ async def free_cmd(client, message):
         client,
         message,
         token,
-        is_premium=True  # bypass shortlink verification
+        is_premium=True  # skip verification
     )
 
-
-# ===============================
-# PREMIUM COMMAND
-# ===============================
 @Bot.on_message(filters.command("premium") & filters.private)
 async def premium_cmd(client, message):
 
@@ -369,8 +362,7 @@ async def premium_cmd(client, message):
 
     if not await is_premium_user(user_id):
         return await message.reply(
-            "❌ This file is for Premium Users only.\n\n"
-            "Contact admin to buy premium."
+            "❌ This is a premium file.\n\nBuy premium to access."
         )
 
     token = message.command[1]
@@ -381,6 +373,7 @@ async def premium_cmd(client, message):
         token,
         is_premium=True
     )
+
 
 
 
