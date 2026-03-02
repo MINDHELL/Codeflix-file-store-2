@@ -25,6 +25,8 @@ MAX_VERIFY_TIME = 600
 verify_cache = {}  # {user_id: {base64_string: {"timestamp": t, "clicked": bool}}}
 BAN_SUPPORT = f"{BAN_SUPPORT}"
 TUT_VID = f"{TUT_VID}"
+BOT_USERNAME = TescgsttBot
+
 
 @Bot.on_message(filters.command("test") & filters.private)
 async def test_cmd(client, message):
