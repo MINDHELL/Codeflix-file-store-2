@@ -338,7 +338,7 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
 
 
 
-@Client.on_message(filters.command("free"))
+@Bot.on_message(filters.command("free"))
 async def free_cmd(client, message):
     if len(message.command) < 2:
         return await message.reply("Usage:\n/free FILE_ID or BATCH_ID")
@@ -373,7 +373,7 @@ async def free_cmd(client, message):
     )
 
 
-@Client.on_message(filters.command("premium"))
+@Bot.on_message(filters.command("premium"))
 async def premium_cmd(client, message):
     if len(message.command) < 2:
         return await message.reply("Usage:\n/premium FILE_ID or BATCH_ID")
