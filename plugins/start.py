@@ -338,6 +338,84 @@ async def handle_file_access(client: Client, message: Message, base64_string: st
 
 
 
+@Client.on_message(filters.command("free"))
+async def free_cmd(client, message):
+    if len(message.command) < 2:
+        return await message.reply("Usage:\n/free FILE_ID or BATCH_ID")
+
+    token = message.command[1]
+
+    user_id = message.from_user.id
+
+    # If batch
+    if token.startswith("batch_"):
+        files = await db.get_batch_files(token)
+        if not files:
+            return await message.reply("Batch not found.")
+
+        for file in files:
+            await client.send_cached_media(
+                chat_id=user_id,
+                file_id=file["file_id"],
+                caption=file.get("caption", "")
+            )
+        return
+
+    # Single file
+    file = await db.get_file(token)
+    if not file:
+        return await message.reply("File not found.")
+
+    await client.send_cached_media(
+        chat_id=user_id,
+        file_id=file["file_id"],
+        caption=file.get("caption", "")
+    )
+
+
+@Client.on_message(filters.command("premium"))
+async def premium_cmd(client, message):
+    if len(message.command) < 2:
+        return await message.reply("Usage:\n/premium FILE_ID or BATCH_ID")
+
+    token = message.command[1]
+    user_id = message.from_user.id
+
+    if not await is_premium(user_id):
+        return await message.reply(
+            "❌ This is a premium file.\n\n"
+            "Buy premium to access this content."
+        )
+
+    # If batch
+    if token.startswith("batch_"):
+        files = await db.get_batch_files(token)
+        if not files:
+            return await message.reply("Batch not found.")
+
+        for file in files:
+            await client.send_cached_media(
+                chat_id=user_id,
+                file_id=file["file_id"],
+                caption=file.get("caption", "")
+            )
+        return
+
+    # Single file
+    file = await db.get_file(token)
+    if not file:
+        return await message.reply("File not found.")
+
+    await client.send_cached_media(
+        chat_id=user_id,
+        file_id=file["file_id"],
+        caption=file.get("caption", "")
+    )
+
+
+
+
+
 
 
 #=====================================================================================##
