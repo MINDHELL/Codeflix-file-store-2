@@ -254,8 +254,7 @@ class Rohit:
     is_verified=False,
     verified_time=0,
     link="",
-    shortener_index=None   # 👈 NEW PARAM
-):
+    shortener_index=None):
     current = await self.db_verify_status(user_id)
 
     current['verify_token'] = verify_token
