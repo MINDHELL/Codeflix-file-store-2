@@ -19,7 +19,7 @@ default_verify = {
     'is_verified': False,
     'verified_time': 0,
     'verify_token': "",
-    'link': ""
+    'link': "",
     'shortener_index': 0
 }
 
@@ -30,7 +30,7 @@ def new_user(id):
             'is_verified': False,
             'verified_time': "",
             'verify_token': "",
-            'link': ""
+            'link': "",
             'shortener_index': 0 
         }
     }
