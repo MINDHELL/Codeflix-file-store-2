@@ -20,6 +20,7 @@ default_verify = {
     'verified_time': 0,
     'verify_token': "",
     'link': ""
+    'shortener_index': 0
 }
 
 def new_user(id):
@@ -30,6 +31,7 @@ def new_user(id):
             'verified_time': "",
             'verify_token': "",
             'link': ""
+            'shortener_index': 0 
         }
     }
 
@@ -245,14 +247,29 @@ class Rohit:
         verify = await self.db_verify_status(user_id)
         return verify
 
-    async def update_verify_status(self, user_id, verify_token="", is_verified=False, verified_time=0, link=""):
-        current = await self.db_verify_status(user_id)
-        current['verify_token'] = verify_token
-        current['is_verified'] = is_verified
-        current['verified_time'] = verified_time
-        current['link'] = link
-        await self.db_update_verify_status(user_id, current)
+    async def update_verify_status(
+    self,
+    user_id,
+    verify_token="",
+    is_verified=False,
+    verified_time=0,
+    link="",
+    shortener_index=None   # 👈 NEW PARAM
+):
+    current = await self.db_verify_status(user_id)
 
+    current['verify_token'] = verify_token
+    current['is_verified'] = is_verified
+    current['verified_time'] = verified_time
+    current['link'] = link
+
+    # Only update shortener_index if provided
+    if shortener_index is not None:
+        current['shortener_index'] = shortener_index
+
+    await self.db_update_verify_status(user_id, current)
+
+    
     # Set verify count (overwrite with new value)
     async def set_verify_count(self, user_id: int, count: int):
         await self.sex_data.update_one({'_id': user_id}, {'$set': {'verify_count': count}}, upsert=True)
