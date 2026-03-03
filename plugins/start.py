@@ -43,8 +43,8 @@ async def check_owner(client, message):
 # Multiple Shortener Config
 # ------------------------------
 SHORTENERS = [
-    {"url": "https://vplink.in/api", "api": "ee4c6892fd0acac564be8afb9a2db6b7ddbac61e"},
-    {"url": "https://get2short.com/api", "api": "7eed58ce58ac8b850e310f1f10903421388c3d36"},
+    {"url": "vplink.in", "api": "ee4c6892fd0acac564be8afb9a2db6b7ddbac61e"},
+    {"url": "get2short.com", "api": "7eed58ce58ac8b850e310f1f10903421388c3d36"},
     {"url": "https://anotherlink.in/api", "api": "API_KEY_3"},
 ]
 
