@@ -39,6 +39,16 @@ async def check_owner(client, message):
         f"Equal? {message.from_user.id == OWNER_ID}"
     )
 
+# ------------------------------
+# Multiple Shortener Config
+# ------------------------------
+SHORTENERS = [
+    {"url": "https://vplink.in/api", "api": "ee4c6892fd0acac564be8afb9a2db6b7ddbac61e"},
+    {"url": "https://get2short.com/api", "api": "7eed58ce58ac8b850e310f1f10903421388c3d36"},
+    {"url": "https://anotherlink.in/api", "api": "API_KEY_3"},
+]
+
+
 
 
 
@@ -47,26 +57,38 @@ async def check_owner(client, message):
 # ------------------------------
 # Short URL generator (Mongo Based)
 # ------------------------------
+# ------------------------------
+# Short URL generator (Rotating Shorteners)
+# ------------------------------
 async def short_url(client: Client, message: Message, base64_string):
     user_id = message.from_user.id
 
+    # Fetch current shortener index from DB (default 0)
+    verify_data = await db.get_verify_status(user_id)
+    current_index = 0
+    if verify_data:
+        current_index = verify_data.get("shortener_index", 0)
+
+    # Pick the shortener
+    shortener = SHORTENERS[current_index]
     prem_link = f"https://t.me/{client.username}?start=yu3elk{base64_string}7"
-    short_link = await get_shortlink(SHORTLINK_URL, SHORTLINK_API, prem_link)
 
+    # Generate short link
+    short_link = await get_shortlink(shortener["url"], shortener["api"], prem_link)
     if not short_link:
-        return await message.reply_text(
-            "⚠️ Could not generate short link. Please try again later."
-        )
+        return await message.reply_text("⚠️ Could not generate short link. Please try again later.")
 
-    # Store verification token in MongoDB
+    # Store verification token with current shortener index
     await db.update_verify_status(
         user_id,
         verify_token=base64_string,
         is_verified=False,
         verified_time=int(time.time()),
-        link=base64_string
+        link=base64_string,
+        shortener_index=current_index
     )
 
+    # Send buttons
     buttons = [
         [
             InlineKeyboardButton("ᴅᴏᴡɴʟᴏᴀᴅ", url=short_link),
@@ -82,6 +104,8 @@ async def short_url(client: Client, message: Message, base64_string):
         caption=SHORT_MSG,
         reply_markup=InlineKeyboardMarkup(buttons)
     )
+
+
 
 
 # ------------------------------
@@ -177,83 +201,74 @@ async def start_command(client: Client, message: Message):
 
 
 
+
 # ------------------------------
-# File access handler (Mongo Based Per File)
-# ------------------------------
-# ------------------------------
-# File access handler (FIXED & CLEAN)
+# Verification & File Access Handler (Modified)
 # ------------------------------
 async def handle_file_access(client: Client, message: Message, base64_string: str, is_premium: bool):
-
     user_id = message.from_user.id
 
-    # =============================
-    # 🔐 VERIFICATION SECTION
-    # =============================
     if not is_premium and user_id != OWNER_ID:
 
         verify = await db.get_verify_status(user_id)
 
-        # 1️⃣ No record OR wrong token
+        # 1️⃣ No record or wrong token
         if not verify or verify.get("verify_token") != base64_string:
-            await message.reply_text(
-                "⛔ Bypass Detected!\nYou must click the short link first."
-            )
-
+            await message.reply_text("⛔ Bypass Detected! You must click the short link first.")
             await client.send_message(
                 OWNER_ID,
-                f"⚠️ BYPASS ALERT!\n\n"
-                f"User: {message.from_user.mention}\n"
-                f"User ID: {user_id}\n"
-                f"File Token: {base64_string}"
+                f"⚠️ BYPASS ALERT!\n\nUser: {message.from_user.mention}\nUser ID: {user_id}\nFile Token: {base64_string}"
             )
             return
 
         sent_time = int(verify.get("verified_time", 0))
         elapsed = int(time.time()) - sent_time
 
-        # 2️⃣ Expired check (MUST BE BEFORE MIN CHECK)
+        # 2️⃣ Expired check
         if elapsed > MAX_VERIFY_TIME:
             await db.update_verify_status(
                 user_id,
                 verify_token="",
                 is_verified=False,
                 verified_time=0,
-                link=""
+                link="",
+                shortener_index=verify.get("shortener_index", 0)
             )
-
-            await message.reply_text(
-                "⏰ Link Expired!\nPlease generate a new link."
-            )
+            await message.reply_text("⏰ Link Expired! Please generate a new link.")
             return
 
         # 3️⃣ Minimum verification time check
         if elapsed < MIN_VERIFY_TIME:
             await message.reply_text(
-                f"⛔ Bypass Detected!\nMinimum verification time: {MIN_VERIFY_TIME} seconds."
+                f"⛔ Bypass Detected! Minimum verification time: {MIN_VERIFY_TIME} seconds."
             )
-
             await client.send_message(
                 OWNER_ID,
-                f"⚠️ FAST VERIFY ALERT!\n\n"
-                f"User: {message.from_user.mention}\n"
-                f"User ID: {user_id}\n"
-                f"Time Taken: {elapsed}s"
+                f"⚠️ FAST VERIFY ALERT!\nUser: {message.from_user.mention}\nUser ID: {user_id}\nTime Taken: {elapsed}s"
             )
             return
 
-        # 4️⃣ SUCCESS → Clear token (one-time use)
+        # 4️⃣ SUCCESS → Clear token & rotate shortener
+        new_index = (verify.get("shortener_index", 0) + 1) % len(SHORTENERS)
         await db.update_verify_status(
             user_id,
             verify_token="",
             is_verified=True,
             verified_time=0,
-            link=""
+            link="",
+            shortener_index=new_index  # rotate shortener for next file/link
         )
 
         # Increase verify count
         count = await db.get_verify_count(user_id)
         await db.set_verify_count(user_id, count + 1)
+
+    # =============================
+    # Continue with your existing file decoding & sending code here
+    # =============================
+
+    
+
 
     # =============================
     # 📂 FILE DECODE SECTION
