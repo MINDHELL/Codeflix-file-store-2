@@ -248,25 +248,28 @@ class Rohit:
         return verify
 
     async def update_verify_status(
-    self,
-    user_id,
-    verify_token="",
-    is_verified=False,
-    verified_time=0,
-    link="",
-    shortener_index=None):
-    current = await self.db_verify_status(user_id)
+        self,
+        user_id,
+        verify_token="",
+        is_verified=False,
+        verified_time=0,
+        link="",
+        shortener_index=None,
+    ):
+        current = await self.db_verify_status(user_id)
 
-    current['verify_token'] = verify_token
-    current['is_verified'] = is_verified
-    current['verified_time'] = verified_time
-    current['link'] = link
+        current['verify_token'] = verify_token
+        current['is_verified'] = is_verified
+        current['verified_time'] = verified_time
+        current['link'] = link
 
-    # Only update shortener_index if provided
-    if shortener_index is not None:
-        current['shortener_index'] = shortener_index
+        # Only update shortener_index if provided
+        if shortener_index is not None:
+            current['shortener_index'] = shortener_index
 
-    await self.db_update_verify_status(user_id, current)
+        await self.db_update_verify_status(user_id, current)
+
+    
 
     
     # Set verify count (overwrite with new value)
